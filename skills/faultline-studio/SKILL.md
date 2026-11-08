@@ -12,10 +12,13 @@ Use the **Faultline** toolset whenever you are debugging local APIs, webhooks, m
 1. **Start or Inspect the Reverse Proxy (`faultline_proxy`)**
    - Call `faultline_proxy(action="start", listen_port=0, target_url="http://127.0.0.1:8000")` to spin up a loopback flight-recorder proxy in front of the user's local service.
    - Sensitive headers (`Authorization`, `Cookie`, `X-Api-Key`) and secret tokens in JSON payloads are automatically redacted before persistence.
+   - The result's `proxy_url` is what the user's client, frontend, or webhook sender must call instead of the service. Tell the user to switch their base URL to it; traffic that bypasses the proxy is not recorded.
+   - Stop proxies you started when the debugging session ends: `faultline_proxy(action="stop")`.
 
 2. **Inspect Captured Traces & Failures (`faultline_traces`)**
    - Call `faultline_traces(status_filter="5xx")` or `faultline_traces(only_drifts=True)` to inspect failing requests or schema drift violations without asking the user to copy-paste `curl` payloads.
    - Embed `::faultline-trace{id="flt-..."}` in your response so the user sees an interactive request/response and replay card in Hermes Desktop.
+   - The user can follow along live in Hermes Desktop (sidebar → **Faultline**) or in the web dashboard tab (`hermes dashboard` → `/faultline`); point them there instead of pasting long trace dumps into chat.
 
 3. **Audit Learned OpenAPI 3.1 Contracts (`faultline_contract`)**
    - Faultline automatically learns baseline JSON schemas and latencies from healthy `2xx` responses and flags `type_mismatch`, `missing_required_field`, `server_error_5xx`, and `latency_regression` drifts.
@@ -26,3 +29,9 @@ Use the **Faultline** toolset whenever you are debugging local APIs, webhooks, m
 
 5. **Deterministically Verify Fixes (`faultline_replay`)**
    - After patching the backend code, call `faultline_replay(trace_id="flt-...")` to re-fire the exact captured request against the live service and prove `500 -> 200 OK` with latency and schema diffing.
+   - Replay really re-sends the request. Before replaying a non-idempotent call (`POST` checkout, payment, webhook, email), confirm with the user that running it again is safe.
+   - Redacted auth headers are not replayed. If the endpoint needs auth, pass fresh credentials the user provides via `override_headers={"Authorization": "Bearer ..."}`. Never invent them.
+   - A `latency_regression` or remaining drift on the replay trace means the fix is incomplete, even if the status is `200`.
+
+6. **Clean Up Chaos**
+   - Chaos rules persist and apply to every proxy. Remove the ones you added with `faultline_chaos(action="remove", rule_id="chaos-...")` or `faultline_chaos(action="clear")` once the resilience test is done.
