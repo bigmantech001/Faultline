@@ -1,0 +1,27 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+<style>html,body{margin:0;background:#06063a;width:1600px;height:900px;overflow:hidden}
+#t{position:absolute;left:34px;top:22px}</style></head><body><div id="t"></div>
+<script src="node_modules/@xterm/xterm/lib/xterm.js"></script><script src="merge.js"></script>
+<script>
+const head = CAST[0], ev = CAST.slice(1);
+const term = new Terminal({cols: head.width, rows: head.height, fontFamily: "Menlo, monospace", fontSize: 20.5, lineHeight: 1.18,
+  theme: {background: "#06063a", foreground: "#e8eaff", cursor: "#06063a", black:"#06063a", blue:"#7d86ff", brightBlue:"#a3aaff", cyan:"#8fe3ff", green:"#5ee6a0", yellow:"#ffd25a", magenta:"#c79bff", red:"#ff7a8a"},
+  allowProposedApi: true, convertEol: false, scrollback: 0});
+term.open(document.getElementById('t'));
+// cast-time -> playback speed (real work sped up during the long waits; labelled in the film)
+const SEG = [[0, 12.5, 1], [12.5, 50.5, 5], [50.5, 56, 1], [56, 83.5, 3], [83.5, 92.5, 1], [92.5, 1e9, 3]];
+const speedAt = t => SEG.find(s => t >= s[0] && t < s[1])[2];
+const MARKS = {typed: 11.0, approval: 51.4, approved: 55.0, merged: 60.4, branches: 78.1, rollbackTyped: 84.4, approval2: 88.9, approved2: 91.9, rolledBack: 128.6};
+window.__marks = {}; window.__done = false;
+window.start = (endAt = 1e9) => {
+  let i = 0, castT = 0, wall = performance.now();
+  const step = () => {
+    const now = performance.now(); castT += (now - wall) / 1000 * speedAt(castT); wall = now;
+    while (i < ev.length && ev[i][0] <= castT) { term.write(ev[i][2]); i++; }
+    for (const [k, v] of Object.entries(MARKS)) if (!(k in window.__marks) && castT >= v) window.__marks[k] = Date.now() / 1000;
+    if (i < ev.length && castT < endAt) requestAnimationFrame(step); else window.__done = true;
+  };
+  requestAnimationFrame(step);
+};
+</script></body></html>

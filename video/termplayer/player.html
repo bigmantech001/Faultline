@@ -1,0 +1,55 @@
+<!doctype html><html><head><meta charset="utf-8">
+<link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css">
+<style>
+/* Faultline film theme: charcoal, warm paper white, recorder orange (src/theme.ts). */
+@font-face { font-family: "IBM Plex Mono"; font-weight: 400; src: url("fonts/IBMPlexMono-400.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 500; src: url("fonts/IBMPlexMono-500.woff2") format("woff2"); }
+@font-face { font-family: "IBM Plex Mono"; font-weight: 600; src: url("fonts/IBMPlexMono-600.woff2") format("woff2"); }
+html,body{margin:0;background:#141311;width:1600px;height:900px;overflow:hidden}
+#t{position:absolute;left:30px;top:16px}
+.xterm .xterm-viewport{background:#141311 !important}
+</style></head><body><div id="t"></div>
+<script src="node_modules/@xterm/xterm/lib/xterm.js"></script><script src="cast.js"></script>
+<script src="segments.js"></script>
+<script>
+// cast.js: window.CAST = [header, ...events] (asciicast v2 lines). segments.js: window.SEGMENTS (cast-time
+// ranges -> playback speed, labelled in the film) and window.CAST_MARKS (beat -> cast seconds).
+const head = CAST[0], ev = CAST.slice(1);
+const SEG = (window.SEGMENTS && window.SEGMENTS.length) ? window.SEGMENTS : [[0, 1e9, 1]];
+const MARKS = window.CAST_MARKS || {};
+const speedAt = t => (SEG.find(s => t >= s[0] && t < s[1]) || [0, 0, 1])[2];
+window.__marks = {}; window.__done = false; window.__ready = false;
+let term;
+async function boot() {
+  try { await Promise.all([400, 500, 600].map(w => document.fonts.load(`${w} 20px "IBM Plex Mono"`))); } catch (e) {}
+  const plex = document.fonts.check('20px "IBM Plex Mono"');
+  term = new Terminal({cols: head.width, rows: head.height, fontFamily: plex ? '"IBM Plex Mono", Menlo, monospace' : "Menlo, monospace", fontSize: 19, lineHeight: 1.18, fontWeight: 400, fontWeightBold: 600,
+    theme: {background: "#141311", foreground: "#f3efe6", cursor: "#141311", cursorAccent: "#141311", selectionBackground: "rgba(255,106,26,0.3)",
+      black: "#141311", red: "#ff3b1f", green: "#3ddc97", yellow: "#ffb020", blue: "#7cc4ff", magenta: "#ffb08a", cyan: "#7cc4ff", white: "#f3efe6",
+      brightBlack: "#7d776c", brightRed: "#ff6a4a", brightGreen: "#6ee7b7", brightYellow: "#ffd25a", brightBlue: "#a6d8ff", brightMagenta: "#ffc8a8", brightCyan: "#a6d8ff", brightWhite: "#ffffff"},
+    allowProposedApi: true, convertEol: false, scrollback: 0});
+  term.open(document.getElementById('t'));
+  window.__font = plex ? "IBM Plex Mono" : "Menlo";
+  window.__ready = true;
+}
+boot();
+window.start = (endAt = 1e9) => {
+  if (!window.__ready) { setTimeout(() => window.start(endAt), 100); return; }
+  let i = 0, castT = 0, wall = performance.now();
+  const step = () => {
+    const now = performance.now(); let left = (now - wall) / 1000; wall = now;
+    // Integrate wall time segment by segment, so a fast segment never overshoots its end into the next one.
+    while (left > 0) {
+      const seg = SEG.find(s => castT >= s[0] && castT < s[1]);
+      const sp = seg ? seg[2] : 1, end = seg ? seg[1] : Infinity;
+      const need = (end - castT) / sp;
+      if (need > left) { castT += left * sp; left = 0; } else { castT = end; left -= need; }
+    }
+    while (i < ev.length && ev[i][0] <= castT) { term.write(ev[i][2]); i++; }
+    for (const [k, v] of Object.entries(MARKS)) if (!(k in window.__marks) && castT >= v) window.__marks[k] = Date.now() / 1000;
+    window.__castT = castT;
+    if (i < ev.length && castT < endAt) requestAnimationFrame(step); else window.__done = true;
+  };
+  requestAnimationFrame(step);
+};
+</script></body></html>
