@@ -1,0 +1,93 @@
+{
+  "title": "Faultline: the flight recorder for your API",
+  "model": "eleven_multilingual_v2",
+  "voices": {
+    "narrator": {
+      "name": "Daniel",
+      "id": "onwK4e9ZLuTAKqWW03F9",
+      "settings": {
+        "stability": 0.55,
+        "similarity_boost": 0.8,
+        "style": 0.2,
+        "speed": 1.07,
+        "use_speaker_boost": true
+      }
+    }
+  },
+  "scenes": [
+    {
+      "id": "open",
+      "seconds": 11,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "One coupon code. Every checkout that uses it dies with a five hundred. The agent you ask to fix it never saw the request, so you paste logs and guess."
+        }
+      ]
+    },
+    {
+      "id": "turn",
+      "seconds": 6,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Faultline. A flight recorder for your API, inside Hermes.",
+          "say": "Fault-line. A flight recorder for your A P I, inside Hermes."
+        }
+      ]
+    },
+    {
+      "id": "record",
+      "seconds": 14,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Hermes puts a proxy in front of the service. Every request and response is recorded. Secrets are redacted before anything touches disk."
+        }
+      ]
+    },
+    {
+      "id": "see",
+      "seconds": 16,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "The failing call is right there: a division by zero when the coupon makes the total zero. On a route that still returns two hundred, Faultline flags drift. Total cents became a string. Currency went missing.",
+          "say": "The failing call is right there: a division by zero when the coupon makes the total zero. On a route that still returns two hundred, Fault-line flags drift. Total cents became a string. Currency went missing."
+        }
+      ]
+    },
+    {
+      "id": "fix",
+      "seconds": 14,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Hermes patches the code. Faultline replays the exact captured request. Five hundred becomes two hundred. Not a claim. A measurement.",
+          "say": "Hermes patches the code. Fault-line replays the exact captured request. Five hundred becomes two hundred. Not a claim. A measurement."
+        }
+      ]
+    },
+    {
+      "id": "chaos",
+      "seconds": 9,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Chaos rules inject rate limits and latency on demand. You learn how clients cope before production teaches you."
+        }
+      ]
+    },
+    {
+      "id": "close",
+      "seconds": 8,
+      "lines": [
+        {
+          "voice": "narrator",
+          "text": "Faultline. A plugin for Hermes Agent. Record it. Prove it.",
+          "say": "Fault-line. A plugin for Hermes Agent. Record it. Prove it."
+        }
+      ]
+    }
+  ]
+}
