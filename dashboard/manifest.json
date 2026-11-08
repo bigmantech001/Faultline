@@ -1,8 +1,13 @@
 {
   "name": "faultline",
-  "api": "plugin_api.py",
-  "title": "Faultline Flight Recorder",
+  "label": "Faultline",
   "description": "Local HTTP flight recorder, OpenAPI 3.1 contract drift verifier, and deterministic chaos replay studio.",
-  "api_prefix": "/api/plugins/faultline",
-  "version": "0.1.0"
+  "icon": "Activity",
+  "version": "0.1.0",
+  "tab": {
+    "path": "/faultline",
+    "position": "end"
+  },
+  "entry": "dist/index.js",
+  "api": "plugin_api.py"
 }
