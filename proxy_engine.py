@@ -5,8 +5,10 @@ from __future__ import annotations
 import datetime as _dt
 import http.server
 import json
+import os
 import random
 import re
+import socket
 import socketserver
 import sqlite3
 import threading
@@ -19,41 +21,59 @@ from pathlib import Path
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 try:
-    from plugins.plugin_storage import plugin_data_dir, plugin_db, plugin_state_dir
-except ImportError:
-    def plugin_data_dir(plugin_name: str, ensure: bool = True) -> Path:
-        base = Path.home() / ".hermes" / "plugins" / plugin_name / "data"
-        if ensure:
-            base.mkdir(parents=True, exist_ok=True)
+    # Hermes: profile-aware ``<hermes home>/plugin-data/<name>/`` + its WAL/NFS-safe opener.
+    from plugins.plugin_storage import plugin_data_dir, plugin_db
+except ImportError:  # standalone (tests, demo script) outside a Hermes install
+    def plugin_data_dir(plugin_name: str) -> Path:
+        import os
+
+        home = Path(os.environ.get("HERMES_HOME") or (Path.home() / ".hermes"))
+        base = home / "plugin-data" / plugin_name
+        base.mkdir(parents=True, exist_ok=True)
         return base
 
-    def plugin_state_dir(plugin_name: str, ensure: bool = True) -> Path:
-        base = Path.home() / ".hermes" / "plugins" / plugin_name / "state"
-        if ensure:
-            base.mkdir(parents=True, exist_ok=True)
-        return base
-
-    def plugin_db(plugin_name: str, db_name: str = "state.db") -> sqlite3.Connection:
-        db_path = plugin_data_dir(plugin_name, ensure=True) / db_name
-        conn = sqlite3.connect(str(db_path), timeout=15.0, check_same_thread=False)
-        conn.row_factory = sqlite3.Row
+    def plugin_db(plugin_name: str, filename: str = "data.db") -> sqlite3.Connection:
+        conn = sqlite3.connect(str(plugin_data_dir(plugin_name) / filename), timeout=15.0, check_same_thread=False)
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
         return conn
 
 try:
-    from hermes_cli.plugin_events import broadcast_plugin_event
+    from hermes_cli.plugin_events import broadcast_plugin_event as _host_broadcast
 except ImportError:
-    def broadcast_plugin_event(plugin_name: str, event_type: str, payload: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
-        return {"plugin": plugin_name, "type": event_type, "payload": payload or {}}
+    _host_broadcast = None
+
+
+def broadcast_plugin_event(plugin_name: str, event_type: str, payload: Optional[Dict[str, Any]] = None) -> None:
+    """Fire-and-forget ``plugin.<name>.<event>`` to connected clients; never raises into callers."""
+    if _host_broadcast is None:
+        return
+    try:
+        _host_broadcast(plugin_name, event_type, payload or {})
+    except Exception:
+        pass
+
 
 try:
-    from agent.redact import redact_sensitive_text
+    from agent.redact import redact_sensitive_text as _host_redact
 except ImportError:
-    def redact_sensitive_text(text: str) -> str:
-        if not text:
-            return text
-        return re.sub(r"(Bearer\s+)[A-Za-z0-9._\-]+", r"\1[REDACTED]", text)
+    _host_redact = None
+
+
+def redact_sensitive_text(text: str) -> str:
+    """Mask credentials before anything is persisted. Uses Hermes's redactor with ``force=True`` (the
+    database is a safety boundary, so ``security.redact_secrets: false`` must not disable it), plus a
+    local Bearer-token pass that also covers standalone runs."""
+    if not text:
+        return text
+    if _host_redact is not None:
+        try:
+            text = _host_redact(text, force=True)
+        except TypeError:
+            text = _host_redact(text)
+        except Exception:
+            pass
+    return re.sub(r"(Bearer\s+)[A-Za-z0-9._~+/=\-]+", r"\1[REDACTED]", text)
 
 
 PLUGIN_NAME = "faultline"
@@ -72,6 +92,80 @@ SENSITIVE_HEADERS = {
 _DB_CACHE: Dict[str, sqlite3.Connection] = {}
 _ACTIVE_PROXIES: Dict[int, "ManagedProxyInstance"] = {}
 _PROXY_LOCK = threading.Lock()
+# One SQLite connection is shared by the proxy's request threads, the agent's tool calls and the
+# dashboard routes; serialize every read-modify-write on it so transactions never interleave.
+_DB_LOCK = threading.RLock()
+
+# Hop-by-hop headers (RFC 9110 §7.6.1) plus framing headers the proxy recomputes itself.
+_HOP_BY_HOP_HEADERS = {
+    "connection",
+    "keep-alive",
+    "proxy-authenticate",
+    "proxy-authorization",
+    "te",
+    "trailer",
+    "trailers",
+    "transfer-encoding",
+    "upgrade",
+    "content-length",
+    "host",
+}
+
+DEFAULT_SETTINGS: Dict[str, Any] = {
+    "latency_spike_threshold_ms": 400,
+    "auto_redact_headers": True,
+    "max_body_chars": 16384,
+}
+_SETTINGS_PROVIDER: Optional[Callable[[str, Any], Any]] = None
+
+
+def set_settings_provider(provider: Optional[Callable[[str, Any], Any]]) -> None:
+    """Install a ``(key, default) -> value`` reader (``ctx.get_config`` when loaded by Hermes)."""
+    global _SETTINGS_PROVIDER
+    _SETTINGS_PROVIDER = provider
+
+
+def get_setting(key: str) -> Any:
+    default = DEFAULT_SETTINGS.get(key)
+    if _SETTINGS_PROVIDER is None:
+        return default
+    try:
+        value = _SETTINGS_PROVIDER(key, default)
+    except Exception:
+        return default
+    if value is None:
+        return default
+    if isinstance(default, bool):
+        if isinstance(value, str):
+            return value.strip().lower() not in ("0", "false", "no", "off", "")
+        return bool(value)
+    if isinstance(default, int):
+        try:
+            return int(value)
+        except (TypeError, ValueError):
+            return default
+    return value
+
+
+class _NoRedirectHandler(urllib.request.HTTPRedirectHandler):
+    """Pass 3xx responses through to the client untouched instead of following them."""
+
+    def redirect_request(self, req, fp, code, msg, headers, newurl):  # noqa: D401
+        return None
+
+
+_UPSTREAM_OPENER = urllib.request.build_opener(_NoRedirectHandler)
+
+
+def _locked(fn: Callable[..., Any]) -> Callable[..., Any]:
+    import functools
+
+    @functools.wraps(fn)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        with _DB_LOCK:
+            return fn(*args, **kwargs)
+
+    return wrapper
 
 
 def _utc_now() -> str:
@@ -80,6 +174,11 @@ def _utc_now() -> str:
 
 def close_cached_dbs() -> None:
     """Close cached SQLite connections cleanly (used by unit tests)."""
+    with _DB_LOCK:
+        _close_cached_dbs_unlocked()
+
+
+def _close_cached_dbs_unlocked() -> None:
     for key, conn in list(_DB_CACHE.items()):
         try:
             conn.close()
@@ -89,6 +188,11 @@ def close_cached_dbs() -> None:
 
 
 def get_db(custom_data_dir: Optional[Path] = None) -> sqlite3.Connection:
+    with _DB_LOCK:
+        return _get_db_unlocked(custom_data_dir)
+
+
+def _get_db_unlocked(custom_data_dir: Optional[Path] = None) -> sqlite3.Connection:
     if custom_data_dir is not None:
         custom_data_dir.mkdir(parents=True, exist_ok=True)
         db_file = str((custom_data_dir / "faultline.db").resolve())
@@ -99,10 +203,12 @@ def get_db(custom_data_dir: Optional[Path] = None) -> sqlite3.Connection:
         conn.execute("PRAGMA journal_mode=WAL")
         conn.execute("PRAGMA foreign_keys=ON")
     else:
-        db_file = str((plugin_data_dir(PLUGIN_NAME, ensure=True) / "faultline.db").resolve())
+        # Keyed by resolved path, so a profile switch (different Hermes home) opens a new DB.
+        db_file = str((plugin_data_dir(PLUGIN_NAME) / "faultline.db").resolve())
         if db_file in _DB_CACHE:
             return _DB_CACHE[db_file]
         conn = plugin_db(PLUGIN_NAME, "faultline.db")
+        conn.row_factory = sqlite3.Row
     _init_db(conn)
     _DB_CACHE[db_file] = conn
     return conn
@@ -169,6 +275,13 @@ def _init_db(conn: sqlite3.Connection) -> None:
             diff_summary_json TEXT DEFAULT '{}',
             created_at TEXT NOT NULL
         );
+
+        CREATE TABLE IF NOT EXISTS active_proxies (
+            listen_port INTEGER PRIMARY KEY,
+            target_url TEXT NOT NULL,
+            started_at TEXT NOT NULL,
+            pid INTEGER NOT NULL
+        );
         """
     )
     conn.commit()
@@ -192,10 +305,11 @@ def normalize_route_path(path: str) -> str:
 
 def redact_headers(headers: Dict[str, Any]) -> Dict[str, str]:
     sanitized: Dict[str, str] = {}
+    redact_auth = bool(get_setting("auto_redact_headers"))
     for k, v in (headers or {}).items():
         key_str = str(k)
         val_str = str(v)
-        if key_str.lower() in SENSITIVE_HEADERS:
+        if redact_auth and key_str.lower() in SENSITIVE_HEADERS:
             sanitized[key_str] = "[REDACTED]"
         else:
             sanitized[key_str] = redact_sensitive_text(val_str)
@@ -212,7 +326,10 @@ def redact_body(body_text: str) -> str:
         redacted,
         flags=re.IGNORECASE,
     )
-    return redacted[:32768]
+    max_chars = max(256, int(get_setting("max_body_chars") or DEFAULT_SETTINGS["max_body_chars"]))
+    if len(redacted) > max_chars:
+        return redacted[:max_chars] + f"...[truncated {len(redacted) - max_chars} chars]"
+    return redacted
 
 
 def infer_json_schema(value: Any) -> Dict[str, Any]:
@@ -334,6 +451,54 @@ def record_trace(
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Persist an intercepted HTTP request/response trace and audit it against learned OpenAPI contracts."""
+    with _DB_LOCK:
+        trace_dict, drifts, contract_key = _record_trace_unlocked(
+            method, path, target_url, request_headers, request_body, response_status,
+            response_headers, response_body, latency_ms, chaos_rule_id, replayed_from, data_dir,
+        )
+    method_up = trace_dict["method"]
+    clean_path = trace_dict["path"]
+    trace_id = trace_dict["trace_id"]
+    broadcast_plugin_event(
+        PLUGIN_NAME,
+        "trace.captured",
+        {
+            "trace_id": trace_id,
+            "method": method_up,
+            "path": clean_path,
+            "status": int(response_status),
+            "latency_ms": round(float(latency_ms), 2),
+            "drift_count": len(drifts),
+            "chaos_rule_id": chaos_rule_id,
+        },
+    )
+    if drifts:
+        broadcast_plugin_event(
+            PLUGIN_NAME,
+            "contract.drift",
+            {
+                "trace_id": trace_id,
+                "contract_key": contract_key,
+                "drifts": drifts,
+            },
+        )
+    return trace_dict
+
+
+def _record_trace_unlocked(
+    method: str,
+    path: str,
+    target_url: str,
+    request_headers: Optional[Dict[str, Any]],
+    request_body: str,
+    response_status: int,
+    response_headers: Optional[Dict[str, Any]],
+    response_body: str,
+    latency_ms: float,
+    chaos_rule_id: str,
+    replayed_from: str,
+    data_dir: Optional[Path],
+) -> Tuple[Dict[str, Any], List[Dict[str, Any]], str]:
     conn = get_db(data_dir)
     trace_id = f"flt-{uuid.uuid4().hex[:8]}"
     method_up = (method or "GET").upper()
@@ -373,6 +538,29 @@ def record_trace(
             }
         )
 
+    spike_threshold = float(get_setting("latency_spike_threshold_ms") or 0)
+    baseline_latency_for_spike = float(contract_row["baseline_latency_ms"] or 0.0) if contract_row is not None else 0.0
+    relative_spike = baseline_latency_for_spike > 0 and latency_ms > max(
+        baseline_latency_for_spike * 4.0, baseline_latency_for_spike + 200.0
+    )
+    absolute_spike = spike_threshold > 0 and latency_ms > spike_threshold
+    if relative_spike or absolute_spike:
+        expected = round(baseline_latency_for_spike, 2) if relative_spike else spike_threshold
+        drifts.append(
+            {
+                "kind": "latency_regression",
+                "field": "$latency_ms",
+                "expected": expected,
+                "actual": round(float(latency_ms), 2),
+                "severity": "medium",
+                "message": (
+                    f"Latency regression on `{contract_key}`: {round(float(latency_ms), 2)}ms vs "
+                    + (f"{round(baseline_latency_for_spike, 2)}ms baseline." if relative_spike
+                       else f"{int(spike_threshold)}ms threshold.")
+                ),
+            }
+        )
+
     if contract_row is None and 200 <= int(response_status) < 300:
         # Establish baseline contract from first healthy 2xx response
         conn.execute(
@@ -397,21 +585,7 @@ def record_trace(
         baseline_resp_schema = json.loads(contract_row["response_schema_json"] or "{}")
         if 200 <= int(response_status) < 300 and resp_schema:
             drifts.extend(compare_schemas(baseline_resp_schema, resp_schema))
-        baseline_latency = float(contract_row["baseline_latency_ms"] or 0.0)
-        if baseline_latency > 0 and latency_ms > max(baseline_latency * 4.0, baseline_latency + 200.0):
-            drifts.append(
-                {
-                    "kind": "latency_regression",
-                    "field": "$latency_ms",
-                    "expected": round(baseline_latency, 2),
-                    "actual": round(float(latency_ms), 2),
-                    "severity": "medium",
-                    "message": (
-                        f"Latency regression on `{contract_key}`: "
-                        f"{round(float(latency_ms), 2)}ms vs {round(baseline_latency, 2)}ms baseline."
-                    ),
-                }
-            )
+        baseline_latency = baseline_latency_for_spike
         if 200 <= int(response_status) < 300 and not drifts:
             new_count = int(contract_row["sample_count"] or 1) + 1
             avg_lat = ((baseline_latency * (new_count - 1)) + float(latency_ms)) / new_count
@@ -451,31 +625,7 @@ def record_trace(
     )
     conn.commit()
 
-    trace_dict = get_trace(trace_id, data_dir=data_dir)
-    broadcast_plugin_event(
-        PLUGIN_NAME,
-        "trace.captured",
-        {
-            "trace_id": trace_id,
-            "method": method_up,
-            "path": clean_path,
-            "status": int(response_status),
-            "latency_ms": round(float(latency_ms), 2),
-            "drift_count": len(drifts),
-            "chaos_rule_id": chaos_rule_id,
-        },
-    )
-    if drifts:
-        broadcast_plugin_event(
-            PLUGIN_NAME,
-            "contract.drift",
-            {
-                "trace_id": trace_id,
-                "contract_key": contract_key,
-                "drifts": drifts,
-            },
-        )
-    return trace_dict
+    return get_trace(trace_id, data_dir=data_dir), drifts, contract_key
 
 
 def _row_to_trace(row: sqlite3.Row) -> Dict[str, Any]:
@@ -501,6 +651,7 @@ def _row_to_trace(row: sqlite3.Row) -> Dict[str, Any]:
     }
 
 
+@_locked
 def get_trace(trace_id: str, data_dir: Optional[Path] = None) -> Dict[str, Any]:
     conn = get_db(data_dir)
     row = conn.execute("SELECT * FROM traces WHERE trace_id = ?", (trace_id,)).fetchone()
@@ -511,6 +662,7 @@ def get_trace(trace_id: str, data_dir: Optional[Path] = None) -> Dict[str, Any]:
     return result
 
 
+@_locked
 def query_traces(
     limit: int = 25,
     method: Optional[str] = None,
@@ -581,6 +733,7 @@ def query_traces(
     }
 
 
+@_locked
 def add_chaos_rule(
     path_pattern: str = "/api/",
     method: str = "ANY",
@@ -644,6 +797,7 @@ def add_chaos_rule(
     }
 
 
+@_locked
 def list_chaos_rules(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     conn = get_db(data_dir)
     rows = conn.execute("SELECT * FROM chaos_rules ORDER BY created_at DESC").fetchall()
@@ -665,6 +819,7 @@ def list_chaos_rules(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     return {"ok": True, "count": len(rules), "rules": rules}
 
 
+@_locked
 def remove_chaos_rule(rule_id: str, data_dir: Optional[Path] = None) -> Dict[str, Any]:
     conn = get_db(data_dir)
     cur = conn.execute("DELETE FROM chaos_rules WHERE rule_id = ?", (rule_id,))
@@ -672,6 +827,7 @@ def remove_chaos_rule(rule_id: str, data_dir: Optional[Path] = None) -> Dict[str
     return {"ok": True, "removed": cur.rowcount > 0, "rule_id": rule_id}
 
 
+@_locked
 def clear_chaos_rules(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     conn = get_db(data_dir)
     cur = conn.execute("DELETE FROM chaos_rules")
@@ -679,6 +835,7 @@ def clear_chaos_rules(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     return {"ok": True, "cleared_count": cur.rowcount}
 
 
+@_locked
 def match_chaos_rule(method: str, path: str, data_dir: Optional[Path] = None) -> Optional[Dict[str, Any]]:
     conn = get_db(data_dir)
     rows = conn.execute("SELECT * FROM chaos_rules ORDER BY created_at DESC").fetchall()
@@ -716,6 +873,7 @@ def match_chaos_rule(method: str, path: str, data_dir: Optional[Path] = None) ->
     return None
 
 
+@_locked
 def generate_openapi_spec(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     """Synthesize an OpenAPI 3.1 contract specification from observed traffic."""
     conn = get_db(data_dir)
@@ -802,6 +960,52 @@ def generate_openapi_spec(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     }
 
 
+def _insert_replay(
+    conn: sqlite3.Connection,
+    replay_id: str,
+    trace_id: str,
+    replay_record: Dict[str, Any],
+    base_target: str,
+    old_status: int,
+    new_status: int,
+    orig: Dict[str, Any],
+    resolved_error: bool,
+    diff_summary: Dict[str, Any],
+) -> None:
+    conn.execute(
+        """
+        INSERT INTO replays (
+            replay_id, original_trace_id, replay_trace_id, target_url,
+            old_status, new_status, old_latency_ms, new_latency_ms,
+            resolved_error, diff_summary_json, created_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """,
+        (
+            replay_id,
+            trace_id,
+            replay_record["trace_id"],
+            base_target,
+            old_status,
+            new_status,
+            float(orig["latency_ms"]),
+            float(replay_record["latency_ms"]),
+            1 if resolved_error else 0,
+            json.dumps(diff_summary),
+            _utc_now(),
+        ),
+    )
+    conn.commit()
+
+
+def _normalize_target_url(target_url: str) -> str:
+    """Validate an upstream base URL: http(s) only, with a host. Raises ValueError otherwise."""
+    raw = str(target_url or "").strip().rstrip("/")
+    parts = urllib.parse.urlsplit(raw)
+    if parts.scheme not in ("http", "https") or not parts.netloc:
+        raise ValueError(f"target_url must be an http(s) URL with a host, got {target_url!r}")
+    return raw
+
+
 def replay_trace(
     trace_id: str,
     target_url: Optional[str] = None,
@@ -815,13 +1019,16 @@ def replay_trace(
     if not orig.get("ok"):
         return orig
 
-    base_target = (target_url or orig["target_url"]).rstrip("/")
+    try:
+        base_target = _normalize_target_url(target_url or orig["target_url"])
+    except ValueError as exc:
+        return {"ok": False, "error": str(exc)}
     query_part = f"?{orig['query_string']}" if orig.get("query_string") else ""
     full_url = f"{base_target}{orig['path']}{query_part}"
 
     headers_to_send: Dict[str, str] = {}
     for k, v in (orig.get("request_headers") or {}).items():
-        if k.lower() not in ("host", "content-length") and v != "[REDACTED]":
+        if k.lower() not in _HOP_BY_HOP_HEADERS and v != "[REDACTED]":
             headers_to_send[k] = str(v)
     if override_headers:
         for k, v in override_headers.items():
@@ -843,7 +1050,7 @@ def replay_trace(
     resp_body = ""
 
     try:
-        with urllib.request.urlopen(req, timeout=10.0) as resp:
+        with _UPSTREAM_OPENER.open(req, timeout=10.0) as resp:
             resp_status = int(resp.status)
             resp_headers = dict(resp.headers.items())
             resp_body = resp.read().decode("utf-8", errors="replace")
@@ -896,29 +1103,9 @@ def replay_trace(
     }
 
     replay_id = f"rpl-{uuid.uuid4().hex[:8]}"
-    conn.execute(
-        """
-        INSERT INTO replays (
-            replay_id, original_trace_id, replay_trace_id, target_url,
-            old_status, new_status, old_latency_ms, new_latency_ms,
-            resolved_error, diff_summary_json, created_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        """,
-        (
-            replay_id,
-            trace_id,
-            replay_record["trace_id"],
-            base_target,
-            old_status,
-            new_status,
-            float(orig["latency_ms"]),
-            float(replay_record["latency_ms"]),
-            1 if resolved_error else 0,
-            json.dumps(diff_summary),
-            _utc_now(),
-        ),
-    )
-    conn.commit()
+    with _DB_LOCK:
+        _insert_replay(conn, replay_id, trace_id, replay_record, base_target, old_status, new_status,
+                       orig, resolved_error, diff_summary)
 
     payload = {
         "ok": True,
@@ -952,7 +1139,7 @@ class ManagedProxyInstance:
 
     def __init__(self, listen_port: int, target_url: str, data_dir: Optional[Path] = None) -> None:
         self.listen_port = int(listen_port)
-        self.target_url = target_url.rstrip("/")
+        self.target_url = _normalize_target_url(target_url)
         self.data_dir = data_dir
         self.started_at = _utc_now()
         self.server: Optional[_ThreadingHTTPServer] = None
@@ -1007,12 +1194,13 @@ class ManagedProxyInstance:
                         self.send_header("X-Faultline-Chaos", chaos["rule_id"])
                         self.send_header("Content-Length", str(len(body_out)))
                         self.end_headers()
-                        self.wfile.write(body_out)
+                        if self.command != "HEAD":
+                            self.wfile.write(body_out)
                         return
 
                 upstream_url = f"{parent.target_url}{self.path}"
                 forward_headers = {
-                    k: v for k, v in req_headers.items() if k.lower() not in ("host", "content-length")
+                    k: v for k, v in req_headers.items() if k.lower() not in _HOP_BY_HOP_HEADERS
                 }
                 req = urllib.request.Request(
                     upstream_url,
@@ -1021,28 +1209,33 @@ class ManagedProxyInstance:
                     method=self.command,
                 )
                 resp_status = 502
-                resp_headers_dict: Dict[str, str] = {}
+                resp_header_items: List[Tuple[str, str]] = []
                 resp_body_bytes = b""
 
                 try:
-                    with urllib.request.urlopen(req, timeout=10.0) as resp:
+                    with _UPSTREAM_OPENER.open(req, timeout=30.0) as resp:
                         resp_status = int(resp.status)
-                        resp_headers_dict = dict(resp.headers.items())
+                        resp_header_items = list(resp.headers.items())
                         resp_body_bytes = resp.read()
                 except urllib.error.HTTPError as exc:
                     try:
                         resp_status = int(exc.code)
-                        resp_headers_dict = dict(exc.headers.items()) if exc.headers else {}
+                        resp_header_items = list(exc.headers.items()) if exc.headers else []
                         resp_body_bytes = exc.read() if exc.fp else b""
                     finally:
                         exc.close()
                 except Exception as exc:
                     resp_status = 502
                     resp_body_bytes = json.dumps({"error": "bad_gateway", "detail": str(exc)}).encode("utf-8")
-                    resp_headers_dict = {"Content-Type": "application/json"}
+                    resp_header_items = [("Content-Type", "application/json")]
 
                 latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
-                resp_body_str = resp_body_bytes.decode("utf-8", errors="replace")
+                resp_headers_dict = dict(resp_header_items)
+                encoding = str(resp_headers_dict.get("Content-Encoding", "") or "").lower()
+                if encoding and encoding != "identity":
+                    resp_body_str = f"[{encoding}-encoded body, {len(resp_body_bytes)} bytes]"
+                else:
+                    resp_body_str = resp_body_bytes.decode("utf-8", errors="replace")
 
                 trace = record_trace(
                     method=self.command,
@@ -1059,11 +1252,20 @@ class ManagedProxyInstance:
                 )
 
                 self.send_response(resp_status)
-                self.send_header("Content-Type", resp_headers_dict.get("Content-Type", "application/json"))
+                for h_name, h_value in resp_header_items:
+                    if h_name.lower() not in _HOP_BY_HOP_HEADERS:
+                        self.send_header(h_name, h_value)
                 self.send_header("X-Faultline-Trace-Id", trace["trace_id"])
                 self.send_header("Content-Length", str(len(resp_body_bytes)))
                 self.end_headers()
-                self.wfile.write(resp_body_bytes)
+                if self.command != "HEAD":
+                    self.wfile.write(resp_body_bytes)
+
+            def do_HEAD(self) -> None:
+                self._handle_any()
+
+            def do_OPTIONS(self) -> None:
+                self._handle_any()
 
             def do_GET(self) -> None:
                 self._handle_any()
@@ -1113,9 +1315,15 @@ def start_proxy(
                 "target_url": inst.target_url,
                 "started_at": inst.started_at,
             }
-        inst = ManagedProxyInstance(listen_port=listen_port, target_url=target_url, data_dir=data_dir)
-        actual_port = inst.start()
+        try:
+            inst = ManagedProxyInstance(listen_port=listen_port, target_url=target_url, data_dir=data_dir)
+            actual_port = inst.start()
+        except ValueError as exc:
+            return {"ok": False, "error": str(exc)}
+        except OSError as exc:
+            return {"ok": False, "error": f"Could not bind 127.0.0.1:{listen_port}: {exc}"}
         _ACTIVE_PROXIES[actual_port] = inst
+        _remember_proxy(actual_port, inst)
         return {
             "ok": True,
             "status": "running",
@@ -1134,13 +1342,88 @@ def stop_proxy(listen_port: Optional[int] = None) -> Dict[str, Any]:
             inst = _ACTIVE_PROXIES.pop(int(listen_port), None)
             if inst:
                 inst.stop()
+                _forget_proxy(int(listen_port), inst)
                 stopped.append(int(listen_port))
         else:
             for port, inst in list(_ACTIVE_PROXIES.items()):
                 inst.stop()
+                _forget_proxy(port, inst)
                 stopped.append(port)
                 _ACTIVE_PROXIES.pop(port, None)
     return {"ok": True, "stopped_ports": stopped}
+
+
+def _remember_proxy(port: int, inst: "ManagedProxyInstance") -> None:
+    """Record a running proxy in the shared database so another process serving this plugin (the
+    dashboard/gateway API) can list it; the in-memory table only covers this process."""
+    try:
+        conn = get_db(inst.data_dir)
+        with _DB_LOCK:
+            conn.execute(
+                "INSERT OR REPLACE INTO active_proxies (listen_port, target_url, started_at, pid) VALUES (?, ?, ?, ?)",
+                (int(port), inst.target_url, inst.started_at, os.getpid()),
+            )
+            conn.commit()
+    except Exception:
+        pass
+
+
+def _forget_proxy(port: int, inst: Optional["ManagedProxyInstance"]) -> None:
+    try:
+        conn = get_db(inst.data_dir if inst is not None else None)
+        with _DB_LOCK:
+            conn.execute("DELETE FROM active_proxies WHERE listen_port = ?", (int(port),))
+            conn.commit()
+    except Exception:
+        pass
+
+
+def _port_accepts(port: int, timeout: float = 0.2) -> bool:
+    try:
+        with socket.create_connection((LOOPBACK_HOST, int(port)), timeout=timeout):
+            return True
+    except OSError:
+        return False
+
+
+def _foreign_proxies(data_dir: Optional[Path], exclude_ports: set) -> List[Dict[str, Any]]:
+    """Proxies recorded by other engine instances: another process, or a second copy of this module in
+    the same process (the dashboard router can run one next to the agent half). Liveness is decided by
+    the port alone, so a crashed owner leaves nothing behind and a live proxy is never hidden."""
+    conn = get_db(data_dir)
+    with _DB_LOCK:
+        rows = conn.execute(
+            "SELECT listen_port, target_url, started_at, pid FROM active_proxies ORDER BY listen_port"
+        ).fetchall()
+    found: List[Dict[str, Any]] = []
+    stale: List[int] = []
+    for row in rows:
+        port = int(row["listen_port"])
+        if port in exclude_ports:
+            continue
+        pid = int(row["pid"])
+        if not _port_accepts(port):
+            stale.append((port, pid, row["started_at"]))
+            continue
+        found.append(
+            {
+                "listen_host": LOOPBACK_HOST,
+                "listen_port": port,
+                "proxy_url": f"http://{LOOPBACK_HOST}:{port}",
+                "target_url": row["target_url"],
+                "started_at": row["started_at"],
+                "pid": pid,
+                "owner": "this-process" if pid == os.getpid() else "other-process",
+            }
+        )
+    if stale:
+        # Delete exactly the rows observed dead, so a proxy restarted on the same port in the meantime keeps its row.
+        with _DB_LOCK:
+            conn.executemany(
+                "DELETE FROM active_proxies WHERE listen_port = ? AND pid = ? AND started_at = ?", stale
+            )
+            conn.commit()
+    return found
 
 
 def get_proxy_status(data_dir: Optional[Path] = None) -> Dict[str, Any]:
@@ -1152,9 +1435,12 @@ def get_proxy_status(data_dir: Optional[Path] = None) -> Dict[str, Any]:
                 "proxy_url": f"http://{LOOPBACK_HOST}:{port}",
                 "target_url": inst.target_url,
                 "started_at": inst.started_at,
+                "pid": os.getpid(),
+                "owner": "this-process",
             }
             for port, inst in sorted(_ACTIVE_PROXIES.items())
         ]
+    proxies.extend(_foreign_proxies(data_dir, {p["listen_port"] for p in proxies}))
     traces_info = query_traces(limit=10, data_dir=data_dir)
     contracts_info = generate_openapi_spec(data_dir=data_dir)
     chaos_info = list_chaos_rules(data_dir=data_dir)
