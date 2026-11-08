@@ -4,10 +4,89 @@ import {
   SIDEBAR_NAV_AREA,
   STATUSBAR_AREAS,
   TRANSCRIPT_DIRECTIVE_AREA,
-  usePluginCleanup,
+  host,
 } from "@hermes/plugin-sdk";
 import { useCallback, useEffect, useState } from "react";
 import { jsx, jsxs } from "react/jsx-runtime";
+
+const PANES_AREA = "panes";
+const TRACE_ID_RE = /^flt-[0-9a-f]{8}$/;
+
+// Set in register(): ctx.rest is scoped to this plugin's backend namespace
+// (/api/plugins/faultline), profile-aware, and works against remote backends.
+let restClient = null;
+
+async function api(path, opts) {
+  if (!restClient) throw new Error("Faultline backend is not connected");
+  return restClient(path, opts);
+}
+
+// The Electron bridge wraps rejections as "Error invoking remote method 'hermes:api': Error: <status>: <body>";
+// show only the part after that prefix.
+function errorText(err) {
+  const msg = err && typeof err.message === "string" ? err.message : typeof err === "string" ? err : "";
+  const raw = msg.trim() || "Unknown error";
+  const m = raw.match(/Error invoking remote method '[^']+': (?:Error: )?([\s\S]+)$/);
+  return (m ? m[1] : raw).trim();
+}
+
+function arrow(text) {
+  return String(text || "").replace(/ -> /g, " → ");
+}
+
+function prettyBody(text) {
+  if (text === null || text === undefined || text === "") return "(empty body)";
+  const s = String(text);
+  try {
+    return JSON.stringify(JSON.parse(s), null, 2);
+  } catch (_err) {
+    return s;
+  }
+}
+
+function driftLabel(count) {
+  return `${count} drift${count === 1 ? "" : "s"}`;
+}
+
+function notify(kind, message) {
+  try {
+    host.notify({ kind, message });
+  } catch (_err) {
+    // older hosts without notify: stay quiet
+  }
+}
+
+function notifyFailure(summary, err) {
+  try {
+    if (typeof host.notifyError === "function") {
+      host.notifyError(err, summary);
+      return;
+    }
+  } catch (_err) {
+    // fall through to the plain toast
+  }
+  notify("error", `${summary}: ${errorText(err)}`);
+}
+
+// Drift messages from the recorder quote fields and endpoints in backticks; render those as code.
+function richText(text) {
+  const parts = String(text || "").split("`");
+  if (parts.length < 3 || parts.length % 2 === 0) return String(text || "");
+  return parts.map((part, i) =>
+    i % 2 === 1
+      ? jsx("code", { style: { fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace" }, children: part }, String(i))
+      : part
+  );
+}
+
+function replayFailed(replay) {
+  return !!replay && (replay.ok === false || Number(replay.new_status) >= 400);
+}
+
+function upstreamUnreachable(replay) {
+  const body = replay && replay.replay_response_body;
+  return typeof body === "string" && body.includes("upstream_unreachable");
+}
 
 function statusColor(status) {
   if (status >= 500) return "#ef4444";
@@ -25,31 +104,34 @@ function FaultlineStudioView() {
   const [replayResult, setReplayResult] = useState(null);
   const [busy, setBusy] = useState(false);
   const [filterMode, setFilterMode] = useState("all");
+  const [loadError, setLoadError] = useState(null);
 
   const refreshAll = useCallback(async () => {
-    try {
-      const [stRes, trRes, ctRes, chRes] = await Promise.all([
-        fetch("/api/plugins/faultline/status"),
-        fetch(
-          filterMode === "drifts"
-            ? "/api/plugins/faultline/traces?only_drifts=true&limit=40"
-            : `/api/plugins/faultline/traces?status_filter=${encodeURIComponent(filterMode)}&limit=40`
-        ),
-        fetch("/api/plugins/faultline/contracts"),
-        fetch("/api/plugins/faultline/chaos"),
-      ]);
-      if (stRes.ok) setStatusData(await stRes.json());
-      if (trRes.ok) {
-        const trJson = await trRes.json();
-        setTraces(trJson.traces || []);
-      }
-      if (ctRes.ok) setContractsData(await ctRes.json());
-      if (chRes.ok) {
-        const chJson = await chRes.json();
-        setChaosRules(chJson.rules || []);
-      }
-    } catch (_err) {
-      // ignore offline preview state
+    const tracesPath =
+      filterMode === "drifts"
+        ? "/traces?only_drifts=true&limit=40"
+        : `/traces?status_filter=${encodeURIComponent(filterMode)}&limit=40`;
+    const calls = [
+      ["status", api("/status"), (st) => setStatusData(st)],
+      ["traces", api(tracesPath), (tr) => setTraces((tr && tr.traces) || [])],
+      ["contracts", api("/contracts"), (ct) => setContractsData(ct)],
+      ["chaos", api("/chaos"), (ch) => setChaosRules((ch && ch.rules) || [])],
+    ];
+    // Each section updates on its own; one failing endpoint must not blank the others.
+    const results = await Promise.allSettled(calls.map((c) => c[1]));
+    const failed = [];
+    results.forEach((r, i) => {
+      if (r.status === "fulfilled") calls[i][2](r.value);
+      else failed.push({ name: calls[i][0], reason: r.reason });
+    });
+    if (failed.length === 0) {
+      setLoadError(null);
+    } else if (failed.length === calls.length) {
+      setLoadError(`Faultline backend unreachable: ${errorText(failed[0].reason)}`);
+    } else {
+      setLoadError(
+        `Could not refresh ${failed.map((f) => f.name).join(", ")}: ${errorText(failed[0].reason)}`
+      );
     }
   }, [filterMode]);
 
@@ -62,16 +144,11 @@ function FaultlineStudioView() {
   const runSimulation = async () => {
     setBusy(true);
     try {
-      const res = await fetch("/api/plugins/faultline/simulate", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ scenario: "checkout_pipeline" }),
-      });
-      if (res.ok) {
-        const sim = await res.json();
-        setReplayResult(sim.replay_verification || null);
-      }
+      const sim = await api("/simulate", { method: "POST", body: { scenario: "checkout_pipeline" } });
+      setReplayResult((sim && sim.replay_verification) || null);
       await refreshAll();
+    } catch (err) {
+      notifyFailure("Faultline simulation failed", err);
     } finally {
       setBusy(false);
     }
@@ -80,33 +157,47 @@ function FaultlineStudioView() {
   const triggerReplay = async (traceId) => {
     setBusy(true);
     try {
-      const res = await fetch("/api/plugins/faultline/replay", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ trace_id: traceId }),
-      });
-      if (res.ok) {
-        setReplayResult(await res.json());
+      const res = await api("/replay", { method: "POST", body: { trace_id: traceId } });
+      if (res && res.ok === false) {
+        setReplayResult(null);
+        notify("error", `Faultline replay failed: ${res.error}`);
+      } else {
+        setReplayResult(res);
       }
       await refreshAll();
+    } catch (err) {
+      notifyFailure("Faultline replay failed", err);
     } finally {
       setBusy(false);
     }
   };
 
   const addQuickChaos = async (pathPattern, statusCode, latencyMs) => {
-    await fetch("/api/plugins/faultline/chaos", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        path_pattern: pathPattern,
-        method: "ANY",
-        fault_type: latencyMs > 0 ? "latency_and_status" : "status_code",
-        status_code: statusCode,
-        latency_ms: latencyMs,
-        probability: 1.0,
-      }),
-    });
+    try {
+      await api("/chaos", {
+        method: "POST",
+        body: {
+          path_pattern: pathPattern,
+          method: "ANY",
+          fault_type: latencyMs > 0 ? "latency_and_status" : "status_code",
+          status_code: statusCode,
+          latency_ms: latencyMs,
+          probability: 1.0,
+        },
+      });
+      notify("info", `Faultline chaos rule added: ${pathPattern} → HTTP ${statusCode}`);
+    } catch (err) {
+      notifyFailure("Could not add chaos rule", err);
+    }
+    await refreshAll();
+  };
+
+  const removeChaos = async (ruleId) => {
+    try {
+      await api(`/chaos/${encodeURIComponent(ruleId)}`, { method: "DELETE" });
+    } catch (err) {
+      notifyFailure("Could not remove chaos rule", err);
+    }
     await refreshAll();
   };
 
@@ -178,6 +269,19 @@ function FaultlineStudioView() {
           }),
         ],
       }),
+      loadError
+        ? jsx("div", {
+            style: {
+              background: "rgba(239, 68, 68, 0.12)",
+              border: "1px solid rgba(239, 68, 68, 0.4)",
+              borderRadius: "8px",
+              padding: "10px 14px",
+              fontSize: "12px",
+              color: "#fca5a5",
+            },
+            children: `${loadError}. If this persists, check that the faultline plugin is enabled for this profile and restart the gateway.`,
+          })
+        : null,
       jsxs("div", {
         style: {
           display: "grid",
@@ -250,45 +354,63 @@ function FaultlineStudioView() {
       replayResult
         ? jsxs("div", {
             style: {
-              background: "rgba(16, 185, 129, 0.12)",
-              border: "1px solid rgba(16, 185, 129, 0.4)",
+              background: replayFailed(replayResult) ? "rgba(239, 68, 68, 0.12)" : "rgba(16, 185, 129, 0.12)",
+              border: replayFailed(replayResult)
+                ? "1px solid rgba(239, 68, 68, 0.4)"
+                : "1px solid rgba(16, 185, 129, 0.4)",
               borderRadius: "10px",
               padding: "14px 18px",
               display: "flex",
               justifyContent: "space-between",
               alignItems: "center",
+              gap: "12px",
             },
             children: [
               jsxs("div", {
                 children: [
                   jsxs("strong", {
-                    style: { color: "#34d399" },
-                    children: ["Deterministic Replay Verified: ", replayResult.status_transition],
+                    style: { color: replayFailed(replayResult) ? "#fca5a5" : "#34d399" },
+                    children: [
+                      replayFailed(replayResult) ? "Replay failed: " : "Deterministic Replay Verified: ",
+                      arrow(replayResult.status_transition) || replayResult.error || "",
+                    ],
                   }),
                   jsxs("div", {
                     style: { fontSize: "12px", color: "#cbd5e1", marginTop: "4px" },
                     children: [
                       "Original Trace ",
                       replayResult.original_trace_id,
-                      " -> Replay Trace ",
+                      " → Replay Trace ",
                       replayResult.replay_trace_id,
                       " (",
                       String(replayResult.new_latency_ms),
                       " ms)",
                     ],
                   }),
+                  upstreamUnreachable(replayResult)
+                    ? jsx("div", {
+                        style: { fontSize: "12px", color: "#fca5a5", marginTop: "4px" },
+                        children:
+                          "The upstream service did not answer. Start it (or pass a new target_url) and replay again.",
+                      })
+                    : null,
                 ],
               }),
               jsx("span", {
                 style: {
-                  background: "#10b981",
-                  color: "#052e16",
+                  background: replayFailed(replayResult) ? "#ef4444" : "#10b981",
+                  color: replayFailed(replayResult) ? "#450a0a" : "#052e16",
                   fontWeight: 700,
                   fontSize: "12px",
                   padding: "4px 10px",
                   borderRadius: "999px",
+                  whiteSpace: "nowrap",
                 },
-                children: replayResult.resolved_error ? "BUG RESOLVED (500 -> 200)" : "REPLAY COMPLETE",
+                children: replayFailed(replayResult)
+                  ? "REPLAY FAILED"
+                  : replayResult.resolved_error
+                    ? `BUG RESOLVED (${arrow(replayResult.status_transition)})`
+                    : "REPLAY COMPLETE",
               }),
             ],
           })
@@ -318,7 +440,7 @@ function FaultlineStudioView() {
       jsxs("div", {
         style: {
           display: "grid",
-          gridTemplateColumns: "1.3fr 1fr",
+          gridTemplateColumns: "minmax(0, 1.3fr) minmax(0, 1fr)",
           gap: "16px",
         },
         children: [
@@ -328,12 +450,19 @@ function FaultlineStudioView() {
               border: "1px solid rgba(148, 163, 184, 0.18)",
               borderRadius: "10px",
               padding: "14px",
+              minWidth: 0,
             },
             children: [
               jsx("h3", { style: { margin: "0 0 12px 0", fontSize: "15px" }, children: "HTTP Flight Recorder Waterfall" }),
               jsx("div", {
                 style: { display: "flex", flexDirection: "column", gap: "8px" },
-                children: traces.map((tr) =>
+                children: traces.length === 0
+                  ? jsx("p", {
+                      style: { color: "#94a3b8", fontSize: "12px", margin: 0 },
+                      children:
+                        "No traces yet. Ask Hermes to start a Faultline proxy in front of your service, or run the live simulation.",
+                    })
+                  : traces.map((tr) =>
                   jsxs(
                     "div",
                     {
@@ -381,7 +510,33 @@ function FaultlineStudioView() {
                                     padding: "2px 6px",
                                     borderRadius: "4px",
                                   },
-                                  children: `${tr.drifts.length} drift`,
+                                  children: driftLabel(tr.drifts.length),
+                                })
+                              : null,
+                            tr.replayed_from
+                              ? jsx("span", {
+                                  title: `Replay of ${tr.replayed_from}`,
+                                  style: {
+                                    background: "rgba(59, 130, 246, 0.18)",
+                                    color: "#93c5fd",
+                                    fontSize: "11px",
+                                    padding: "2px 6px",
+                                    borderRadius: "4px",
+                                  },
+                                  children: "replay",
+                                })
+                              : null,
+                            tr.chaos_rule_id
+                              ? jsx("span", {
+                                  title: `Injected by chaos rule ${tr.chaos_rule_id}`,
+                                  style: {
+                                    background: "rgba(148, 163, 184, 0.18)",
+                                    color: "#cbd5e1",
+                                    fontSize: "11px",
+                                    padding: "2px 6px",
+                                    borderRadius: "4px",
+                                  },
+                                  children: "chaos",
                                 })
                               : null,
                           ],
@@ -425,6 +580,7 @@ function FaultlineStudioView() {
               border: "1px solid rgba(148, 163, 184, 0.18)",
               borderRadius: "10px",
               padding: "14px",
+              minWidth: 0,
             },
             children: [
               jsx("h3", {
@@ -459,7 +615,7 @@ function FaultlineStudioView() {
                               jsx("ul", {
                                 style: { margin: "6px 0 0 0", paddingLeft: "18px" },
                                 children: selectedTrace.drifts.map((d, idx) =>
-                                  jsx("li", { children: d.message }, String(idx))
+                                  jsx("li", { children: richText(d.message) }, String(idx))
                                 ),
                               }),
                             ],
@@ -471,10 +627,13 @@ function FaultlineStudioView() {
                           background: "#020617",
                           padding: "10px",
                           borderRadius: "6px",
-                          overflowX: "auto",
+                          overflow: "auto",
+                          maxHeight: "260px",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
                           margin: 0,
                         },
-                        children: selectedTrace.request_body || "(empty body)",
+                        children: prettyBody(selectedTrace.request_body),
                       }),
                       jsx("div", { style: { color: "#94a3b8" }, children: "Response Payload:" }),
                       jsx("pre", {
@@ -482,10 +641,13 @@ function FaultlineStudioView() {
                           background: "#020617",
                           padding: "10px",
                           borderRadius: "6px",
-                          overflowX: "auto",
+                          overflow: "auto",
+                          maxHeight: "260px",
+                          whiteSpace: "pre-wrap",
+                          wordBreak: "break-word",
                           margin: 0,
                         },
-                        children: selectedTrace.response_body || "(empty body)",
+                        children: prettyBody(selectedTrace.response_body),
                       }),
                     ],
                   })
@@ -503,18 +665,42 @@ function FaultlineStudioView() {
                         jsxs(
                           "div",
                           {
-                            style: { fontSize: "12px", color: "#fbbf24", marginBottom: "4px" },
+                            style: {
+                              fontSize: "12px",
+                              color: "#fbbf24",
+                              marginBottom: "4px",
+                              display: "flex",
+                              justifyContent: "space-between",
+                              gap: "8px",
+                            },
                             children: [
-                              r.rule_id,
-                              ": ",
-                              r.method,
-                              " ",
-                              r.path_pattern,
-                              " -> HTTP ",
-                              String(r.status_code),
-                              " (hits: ",
-                              String(r.hits),
-                              ")",
+                              jsxs("span", {
+                                children: [
+                                  r.rule_id,
+                                  ": ",
+                                  r.method,
+                                  " ",
+                                  r.path_pattern,
+                                  " → HTTP ",
+                                  String(r.status_code),
+                                  " (hits: ",
+                                  String(r.hits),
+                                  ")",
+                                ],
+                              }),
+                              jsx("button", {
+                                onClick: () => removeChaos(r.rule_id),
+                                style: {
+                                  background: "transparent",
+                                  color: "#fca5a5",
+                                  border: "1px solid rgba(239, 68, 68, 0.4)",
+                                  borderRadius: "4px",
+                                  fontSize: "11px",
+                                  padding: "0 6px",
+                                  cursor: "pointer",
+                                },
+                                children: "Remove",
+                              }),
                             ],
                           },
                           r.rule_id
@@ -533,16 +719,35 @@ function FaultlineStudioView() {
 
 function FaultlineWaterfallPane() {
   const [traces, setTraces] = useState([]);
+  // Panes stay mounted while hidden behind another tab; skip polling until this one is on screen.
+  const [visible, setVisible] = useState(() => {
+    try {
+      if (typeof host.paneVisibility !== "function") return true;
+      const atom = host.paneVisibility("faultline:waterfall");
+      return !atom || typeof atom.get !== "function" ? true : atom.get() !== false;
+    } catch (_err) {
+      return true;
+    }
+  });
 
   useEffect(() => {
+    if (typeof host.paneVisibility !== "function") return undefined;
+    try {
+      const atom = host.paneVisibility("faultline:waterfall");
+      if (!atom || typeof atom.subscribe !== "function") return undefined;
+      return atom.subscribe((value) => setVisible(value !== false));
+    } catch (_err) {
+      return undefined;
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!visible) return undefined;
     let active = true;
     const load = async () => {
       try {
-        const res = await fetch("/api/plugins/faultline/traces?limit=15");
-        if (res.ok && active) {
-          const data = await res.json();
-          setTraces(data.traces || []);
-        }
+        const data = await api("/traces?limit=15");
+        if (active) setTraces((data && data.traces) || []);
       } catch (_err) {
         // ignore
       }
@@ -553,7 +758,7 @@ function FaultlineWaterfallPane() {
       active = false;
       clearInterval(id);
     };
-  }, []);
+  }, [visible]);
 
   return jsxs("div", {
     style: { padding: "12px", color: "#e2e8f0", fontSize: "12px" },
@@ -573,9 +778,12 @@ function FaultlineWaterfallPane() {
               background: "rgba(30, 41, 59, 0.7)",
               display: "flex",
               justifyContent: "space-between",
+              alignItems: "baseline",
+              gap: "8px",
             },
             children: [
               jsxs("span", {
+                style: { minWidth: 0, overflowWrap: "anywhere" },
                 children: [
                   jsx("strong", {
                     style: { color: statusColor(t.response_status), marginRight: "6px" },
@@ -584,9 +792,14 @@ function FaultlineWaterfallPane() {
                   t.method,
                   " ",
                   t.path,
+                  t.replayed_from ? " · replay" : t.chaos_rule_id ? " · chaos" : "",
+                  t.drifts && t.drifts.length > 0 ? ` · ${driftLabel(t.drifts.length)}` : "",
                 ],
               }),
-              jsxs("span", { style: { color: "#94a3b8" }, children: [String(t.latency_ms), "ms"] }),
+              jsxs("span", {
+                style: { color: "#94a3b8", whiteSpace: "nowrap", flexShrink: 0 },
+                children: [String(t.latency_ms), " ms"],
+              }),
             ],
           },
           t.trace_id
@@ -603,11 +816,8 @@ function FaultlineStatusChip() {
     let mounted = true;
     const poll = async () => {
       try {
-        const res = await fetch("/api/plugins/faultline/status");
-        if (res.ok && mounted) {
-          const data = await res.json();
-          if (data.summary) setSummary(data.summary);
-        }
+        const data = await api("/status");
+        if (mounted && data && data.summary) setSummary(data.summary);
       } catch (_e) {
         // ignore
       }
@@ -635,25 +845,49 @@ function FaultlineStatusChip() {
       "Faultline: ",
       String(summary.total_traces || 0),
       " traces",
-      summary.count_5xx > 0 ? ` (${summary.count_5xx} 5xx)` : "",
+      summary.count_5xx > 0 ? ` · ${summary.count_5xx} server fault${summary.count_5xx === 1 ? "" : "s"}` : "",
     ],
   });
 }
 
-function FaultlineDirectiveCard(props) {
-  const attrs = (props && props.attributes) || {};
-  const traceId = attrs.id || "";
+function FaultlineDirectiveCard({ traceId }) {
   const [trace, setTrace] = useState(null);
+  const [missing, setMissing] = useState(false);
+  const [replay, setReplay] = useState(null);
+  const [busy, setBusy] = useState(false);
 
   useEffect(() => {
-    if (!traceId) return;
-    fetch(`/api/plugins/faultline/traces/${encodeURIComponent(traceId)}`)
-      .then((r) => (r.ok ? r.json() : null))
+    let active = true;
+    api(`/traces/${encodeURIComponent(traceId)}`)
       .then((d) => {
+        if (!active) return;
         if (d && d.ok) setTrace(d);
+        else setMissing(true);
       })
-      .catch(() => {});
+      .catch(() => active && setMissing(true));
+    return () => {
+      active = false;
+    };
   }, [traceId]);
+
+  const doReplay = async () => {
+    setBusy(true);
+    try {
+      const res = await api("/replay", { method: "POST", body: { trace_id: traceId } });
+      setReplay(res);
+    } catch (err) {
+      setReplay({ ok: false, error: errorText(err) });
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (missing) {
+    return jsx("div", {
+      style: { fontSize: "12px", color: "#94a3b8" },
+      children: `Faultline trace ${traceId} is not in this profile's recorder.`,
+    });
+  }
 
   if (!trace) {
     return jsxs("div", {
@@ -687,7 +921,7 @@ function FaultlineDirectiveCard(props) {
               trace.method,
               " ",
               trace.path,
-              " -> HTTP ",
+              " → HTTP ",
               String(trace.response_status),
             ],
           }),
@@ -695,64 +929,156 @@ function FaultlineDirectiveCard(props) {
         ],
       }),
       trace.drifts && trace.drifts.length > 0
-        ? jsx("div", {
+        ? jsxs("div", {
             style: { color: "#fbbf24", marginBottom: "6px" },
-            children: `OpenAPI Drift: ${trace.drifts[0].message}`,
+            children: [
+              jsx("div", {
+                style: { fontWeight: 600 },
+                children: trace.drifts.length === 1 ? "OpenAPI drift" : `OpenAPI drift (${trace.drifts.length} findings)`,
+              }),
+              jsx("ul", {
+                style: { margin: "2px 0 0 0", paddingLeft: "16px" },
+                children: trace.drifts.slice(0, 3).map((d, idx) =>
+                  jsx("li", { children: richText(d.message) }, String(idx))
+                ),
+              }),
+              trace.drifts.length > 3
+                ? jsx("div", { style: { color: "#94a3b8" }, children: `+${trace.drifts.length - 3} more in the Studio` })
+                : null,
+            ],
           })
         : null,
       jsx("code", {
-        style: { display: "block", whiteSpace: "pre-wrap", color: "#cbd5e1" },
-        children: trace.response_body || "",
+        style: {
+          display: "block",
+          whiteSpace: "pre-wrap",
+          color: "#cbd5e1",
+          maxHeight: "160px",
+          overflowY: "auto",
+        },
+        children: prettyBody(trace.response_body),
+      }),
+      jsxs("div", {
+        style: { display: "flex", alignItems: "center", gap: "10px", marginTop: "8px" },
+        children: [
+          jsx("button", {
+            onClick: doReplay,
+            disabled: busy,
+            style: {
+              background: "rgba(59, 130, 246, 0.2)",
+              color: "#93c5fd",
+              border: "1px solid rgba(59, 130, 246, 0.4)",
+              borderRadius: "6px",
+              padding: "4px 10px",
+              fontSize: "11px",
+              cursor: busy ? "wait" : "pointer",
+            },
+            children: busy ? "Replaying..." : "Replay",
+          }),
+          replay
+            ? jsx("span", {
+                style: { color: replayFailed(replay) ? "#fca5a5" : replay.resolved_error ? "#34d399" : "#cbd5e1" },
+                children:
+                  replay.ok === false
+                    ? `Replay failed: ${replay.error}`
+                    : `${arrow(replay.status_transition)} (${replay.new_latency_ms} ms)` +
+                      (replay.resolved_error
+                        ? " · resolved"
+                        : replayFailed(replay)
+                          ? upstreamUnreachable(replay)
+                            ? " · failed (upstream unreachable)"
+                            : " · failed"
+                          : ""),
+              })
+            : null,
+        ],
       }),
     ],
   });
 }
 
-export default function registerFaultlineDesktopPlugin(registry) {
-  usePluginCleanup(registry);
-
-  registry.register(ROUTES_AREA, {
-    id: "faultline-studio-route",
-    path: "/faultline",
-    title: "Faultline Studio",
-    component: FaultlineStudioView,
-  });
-
-  registry.register(SIDEBAR_NAV_AREA, {
-    id: "faultline-sidebar-item",
-    label: "Faultline Studio",
-    path: "/faultline",
-    icon: "activity",
-    order: 42,
-  });
-
-  if (registry.panes && typeof registry.panes.register === "function") {
-    registry.panes.register({
-      id: "faultline-waterfall-pane",
-      title: "Faultline Waterfall",
-      defaultDock: "right",
-      component: FaultlineWaterfallPane,
+export default {
+  id: "faultline",
+  name: "Faultline",
+  register(ctx) {
+    restClient = ctx.rest;
+    ctx.onDispose(() => {
+      restClient = null;
     });
-  }
 
-  registry.register(STATUSBAR_AREAS.right, {
-    id: "faultline-status-chip",
-    component: FaultlineStatusChip,
-    order: 25,
-  });
-
-  registry.register(PALETTE_AREA, {
-    id: "faultline-palette-simulate",
-    title: "Faultline: Run Live Capture & Replay Simulation",
-    category: "Faultline",
-    action: () => {
-      fetch("/api/plugins/faultline/simulate", { method: "POST" }).catch(() => {});
-    },
-  });
-
-  registry.register(TRANSCRIPT_DIRECTIVE_AREA, {
-    id: "faultline-trace-directive",
-    directive: "faultline-trace",
-    component: FaultlineDirectiveCard,
-  });
-}
+    ctx.registerMany([
+      {
+        id: "studio",
+        area: ROUTES_AREA,
+        title: "Faultline Studio",
+        data: { path: "/faultline" },
+        render: () => jsx(FaultlineStudioView, {}),
+      },
+      {
+        id: "nav",
+        area: SIDEBAR_NAV_AREA,
+        order: 42,
+        data: { path: "/faultline", label: "Faultline", codicon: "pulse" },
+      },
+      {
+        id: "waterfall",
+        area: PANES_AREA,
+        title: "Faultline",
+        data: { placement: "right", width: "320px" },
+        render: () => jsx(FaultlineWaterfallPane, {}),
+      },
+      {
+        id: "status",
+        area: STATUSBAR_AREAS.right,
+        order: 125,
+        render: () => jsx(FaultlineStatusChip, {}),
+      },
+      {
+        id: "open",
+        area: PALETTE_AREA,
+        data: {
+          id: "faultline.open",
+          label: "Faultline: Open Studio",
+          keywords: ["faultline", "api", "traces", "replay"],
+          run: () => host.navigate("/faultline"),
+        },
+      },
+      {
+        id: "simulate",
+        area: PALETTE_AREA,
+        data: {
+          id: "faultline.simulate",
+          label: "Faultline: Run Live Capture & Replay Simulation",
+          keywords: ["faultline", "simulate", "demo", "chaos"],
+          run: async () => {
+            try {
+              const sim = await api("/simulate", { method: "POST", body: { scenario: "checkout_pipeline" } });
+              const rpl = (sim && sim.replay_verification) || {};
+              notify(
+                replayFailed(rpl) ? "warning" : "success",
+                `Faultline simulation: replay ${arrow(rpl.status_transition) || "done"}${replayFailed(rpl) ? " (replay failed)" : ""}`
+              );
+            } catch (err) {
+              notifyFailure("Faultline simulation failed", err);
+            }
+          },
+        },
+      },
+      {
+        id: "trace-card",
+        area: TRANSCRIPT_DIRECTIVE_AREA,
+        data: {
+          name: "faultline-trace",
+          render: ({ attrs, source }) => {
+            const traceId = attrs && typeof attrs.id === "string" ? attrs.id : "";
+            if (!TRACE_ID_RE.test(traceId)) {
+              // A claimed directive is lifted out of the paragraph, so show the model's text rather than nothing.
+              return jsx("code", { style: { fontSize: "12px", color: "#94a3b8" }, children: source || "::faultline-trace" });
+            }
+            return jsx(FaultlineDirectiveCard, { traceId });
+          },
+        },
+      },
+    ]);
+  },
+};
