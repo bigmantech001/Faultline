@@ -1,0 +1,221 @@
+[
+ {
+  "wait_for": "! shell",
+  "timeout": 90,
+  "mark": "ready"
+ },
+ {
+  "autoreply": [
+   {
+    "pattern": "Dangerous Command.{0,3000}?Enter to confirm",
+    "key": "enter",
+    "mark": "approval"
+   }
+  ]
+ },
+ {
+  "sleep": 2.5
+ },
+ {
+  "type": "Our checkout service runs on http://127.0.0.1:8000. Some coupon checkouts fail with a 500 and I cannot see why. Put Faultline in front of it on port 8700 and tell me the proxy URL to point the storefront at.",
+  "enter": true,
+  "cps": 45,
+  "mark": "a.typed"
+ },
+ {
+  "wait_for": "(?i)faultline_proxy",
+  "timeout": 90,
+  "mark": "proxy.called"
+ },
+ {
+  "wait_for": "called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+  "timeout": 150,
+  "mark": "proxy.started"
+ },
+ {
+  "unless": "(?i)faultline_proxy",
+  "steps": [
+   {
+    "type": "Yes, go ahead and start the Faultline proxy on port 8700 now.",
+    "enter": true,
+    "cps": 45
+   },
+   {
+    "wait_for": "(?i)faultline_proxy",
+    "timeout": 90,
+    "mark": "proxy.called"
+   },
+   {
+    "wait_for": "called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+    "timeout": 150,
+    "mark": "proxy.started"
+   }
+  ]
+ },
+ {
+  "sleep": 3
+ },
+ {
+  "run": "echo 'mark traffic.baseline' >> __CTL__; python3 /Users/bigmantech001/Faultline/video/demo/client.py http://127.0.0.1:8700 baseline",
+  "out": "__TAKE__/traffic_baseline.txt",
+  "mark": "traffic.baseline"
+ },
+ {
+  "sleep": 6
+ },
+ {
+  "run": "echo 'mark traffic.coupon' >> __CTL__; python3 /Users/bigmantech001/Faultline/video/demo/client.py http://127.0.0.1:8700 coupon",
+  "out": "__TAKE__/traffic_coupon.txt",
+  "mark": "traffic.coupon"
+ },
+ {
+  "sleep": 6
+ },
+ {
+  "run": "echo 'mark traffic.orders' >> __CTL__; python3 /Users/bigmantech001/Faultline/video/demo/client.py http://127.0.0.1:8700 orders",
+  "out": "__TAKE__/traffic_orders.txt",
+  "mark": "traffic.orders"
+ },
+ {
+  "sleep": 6
+ },
+ {
+  "run": "echo 'still see-waterfall' >> __CTL__; echo 'text see-waterfall' >> __CTL__; sleep 1; echo \"js (() => { const spans = [...document.querySelectorAll('span')].filter(s => s.textContent.trim() === '500' && s.closest('div[style*=\\\"cursor: pointer\\\"]')); if (!spans.length) return 'none'; spans[0].click(); return 'clicked 500 (' + spans.length + ' rows)'; })()\" >> __CTL__; echo 'mark inspector.opened' >> __CTL__",
+  "mark": "studio.click500"
+ },
+ {
+  "sleep": 4
+ },
+ {
+  "run": "echo 'still see-inspector' >> __CTL__; echo 'text see-inspector' >> __CTL__",
+  "mark": "studio.still.inspector"
+ },
+ {
+  "sleep": 2
+ },
+ {
+  "type": "The storefront just hit it. Find the failing request in Faultline, tell me exactly why it fails, and fix the cause in checkout_logic.py. The service hot-reloads. Then replay the failed trace to prove it.",
+  "enter": true,
+  "cps": 45,
+  "mark": "c.typed"
+ },
+ {
+  "wait_for": "(?i)faultline_traces",
+  "timeout": 90,
+  "mark": "trace.read"
+ },
+ {
+  "wait_for": "\ud83d\udd27|\u270d\ufe0f|called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+  "timeout": 300,
+  "mark": "patch.applied"
+ },
+ {
+  "wait_for": "(?i)faultline_replay|called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+  "timeout": 240,
+  "mark": "replay.called"
+ },
+ {
+  "wait_for": "called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+  "timeout": 300,
+  "mark": "replay.done"
+ },
+ {
+  "unless": "(?i)faultline_replay",
+  "steps": [
+   {
+    "type": "Yes, it is safe to replay that checkout request. Fix it if you have not yet, then replay it.",
+    "enter": true,
+    "cps": 45,
+    "mark": "c2.typed"
+   },
+   {
+    "wait_for": "(?i)faultline_replay",
+    "timeout": 240,
+    "mark": "replay.called"
+   },
+   {
+    "wait_for": "called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+    "timeout": 300,
+    "mark": "replay.done"
+   }
+  ]
+ },
+ {
+  "sleep": 3
+ },
+ {
+  "run": "echo 'still fix-waterfall' >> __CTL__; echo 'text fix-waterfall' >> __CTL__",
+  "mark": "studio.still.fix"
+ },
+ {
+  "sleep": 2
+ },
+ {
+  "run": "echo \"js (() => { const rows = [...document.querySelectorAll('div')].filter(d => d.children.length === 2 && d.querySelector('button') && d.innerText.includes('/api/v1/checkout') && [...d.querySelectorAll('span')].some(s => s.textContent.trim() === '500')); const row = rows[rows.length - 1]; const btn = row && [...row.querySelectorAll('button')].find(b => b.textContent.trim() === 'Replay'); if (!btn) return 'no button'; btn.click(); return 'clicked'; })()\" >> __CTL__; echo 'mark studio.replay.clicked' >> __CTL__",
+  "mark": "studio.replay.clicked"
+ },
+ {
+  "sleep": 4
+ },
+ {
+  "run": "echo 'still fix-banner' >> __CTL__; echo 'text fix-banner' >> __CTL__",
+  "mark": "studio.still.banner"
+ },
+ {
+  "sleep": 2
+ },
+ {
+  "type": "Also check the orders route for contract drift, then add a chaos rule that makes POST /api/v1/webhooks/stripe answer 429 so we can test the retry path, and show me the learned OpenAPI contract.",
+  "enter": true,
+  "cps": 45,
+  "mark": "d.typed"
+ },
+ {
+  "wait_until": "bash /Users/bigmantech001/Faultline/video/scripts/wait_chaos_rule.sh",
+  "timeout": 240,
+  "every": 0.5,
+  "mark": "chaos.added"
+ },
+ {
+  "sleep": 2
+ },
+ {
+  "run": "echo 'mark chaos.hit' >> __CTL__; python3 /Users/bigmantech001/Faultline/video/demo/client.py http://127.0.0.1:8700 webhook",
+  "out": "__TAKE__/traffic_webhook.txt",
+  "mark": "chaos.hit"
+ },
+ {
+  "wait_for": "called \\d+ tools? \u00b7 |\u2500 \\d+(\\.\\d+)?s \u00b7 \\d+:\\d\\d [AP]M",
+  "timeout": 300,
+  "mark": "contract.shown"
+ },
+ {
+  "sleep": 2
+ },
+ {
+  "run": "echo \"js (() => { const spans = [...document.querySelectorAll('span')].filter(s => s.textContent.trim() === '429' && s.closest('div[style*=\\\"cursor: pointer\\\"]')); if (!spans.length) return 'none'; spans[0].click(); return 'clicked 429 (' + spans.length + ' rows)'; })()\" >> __CTL__; echo 'mark inspector.chaos' >> __CTL__",
+  "mark": "studio.click429"
+ },
+ {
+  "sleep": 4
+ },
+ {
+  "run": "echo 'still chaos-inspector' >> __CTL__; echo 'text chaos-inspector' >> __CTL__",
+  "mark": "studio.still.chaos"
+ },
+ {
+  "sleep": 3
+ },
+ {
+  "type": "/exit",
+  "enter": true,
+  "cps": 20,
+  "mark": "exit.typed"
+ },
+ {
+  "sleep": 4
+ },
+ {
+  "mark": "end"
+ }
+]
