@@ -7,3 +7,14 @@ __pycache__/
 *.db-shm
 *.db-wal
 .DS_Store
+
+# demo film (video/): generated and heavy artifacts stay out of the repo
+video/node_modules/
+video/termplayer/node_modules/
+video/out/
+video/.cache/
+video/public/footage/
+video/public/stills/
+video/public/audio/
+video/src/timing.json
+video/src/footage.json
