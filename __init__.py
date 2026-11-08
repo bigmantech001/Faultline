@@ -12,23 +12,29 @@ from . import proxy_engine, schemas, tools
 
 
 def _tool_execution_middleware(
-    tool_name: str,
-    args: Dict[str, Any],
-    next_fn: Callable[[str, Dict[str, Any]], str],
-    context: Any,
-) -> str:
-    """Measure tool execution duration and annotate Faultline telemetry."""
+    tool_name: str = "",
+    args: Optional[Dict[str, Any]] = None,
+    next_call: Optional[Callable[..., Any]] = None,
+    **kwargs: Any,
+) -> Any:
+    """Wrap tool execution (Hermes ``tool_execution`` middleware contract): time Faultline's own
+    tools and annotate their JSON result with ``middleware_latency_ms``. Every other tool passes
+    straight through untouched. ``next_call`` is single-use and is called exactly once."""
+    if next_call is None:
+        return None
+    if not str(tool_name or "").startswith("faultline_"):
+        return next_call(args)
     started = time.perf_counter()
-    result = next_fn(tool_name, args)
+    result = next_call(args)
     elapsed_ms = round((time.perf_counter() - started) * 1000.0, 2)
-    if tool_name.startswith("faultline_") and isinstance(result, str) and result.startswith("{"):
+    if isinstance(result, str) and result.startswith("{"):
         try:
             parsed = json.loads(result)
-            if isinstance(parsed, dict) and "middleware_latency_ms" not in parsed:
-                parsed["middleware_latency_ms"] = elapsed_ms
-                return json.dumps(parsed, indent=2)
-        except Exception:
-            pass
+        except ValueError:
+            return result
+        if isinstance(parsed, dict) and "middleware_latency_ms" not in parsed:
+            parsed["middleware_latency_ms"] = elapsed_ms
+            return json.dumps(parsed, indent=2)
     return result
 
 
@@ -124,6 +130,10 @@ def _cli_faultline_handler(args: argparse.Namespace) -> None:
 
 def register(ctx: Any) -> None:
     """Register Faultline tools, hooks, middleware, slash commands, CLI commands, and skill."""
+    get_config = getattr(ctx, "get_config", None)
+    if callable(get_config):
+        proxy_engine.set_settings_provider(get_config)
+
     ctx.register_tool(
         name="faultline_proxy",
         toolset="faultline",
