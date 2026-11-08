@@ -1,0 +1,119 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "Faultline Learned Service Contract",
+    "version": "1.0.0",
+    "description": "Automatically synthesized by Hermes Faultline Flight Recorder."
+  },
+  "paths": {
+    "/api/v1/checkout": {
+      "post": {
+        "summary": "Observed POST /api/v1/checkout (4 baseline samples)",
+        "x-faultline-baseline-latency-ms": 1.16,
+        "responses": {
+          "200": {
+            "description": "Baseline observed response schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "checkout_id": {
+                      "type": "string"
+                    },
+                    "coupon": {
+                      "type": "null"
+                    },
+                    "discount_cents": {
+                      "type": "integer"
+                    },
+                    "fee_ratio": {
+                      "type": "number"
+                    },
+                    "net_payable_cents": {
+                      "type": "integer"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "subtotal_cents": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "checkout_id",
+                    "discount_cents",
+                    "fee_ratio",
+                    "net_payable_cents",
+                    "status",
+                    "subtotal_cents"
+                  ]
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "subtotal_cents": {
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "subtotal_cents"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/v1/orders/{id}": {
+      "get": {
+        "summary": "Observed GET /api/v1/orders/{id} (3 baseline samples)",
+        "x-faultline-baseline-latency-ms": 1.58,
+        "responses": {
+          "200": {
+            "description": "Baseline observed response schema",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "currency": {
+                      "type": "string"
+                    },
+                    "customer_tier": {
+                      "type": "string"
+                    },
+                    "order_id": {
+                      "type": "string"
+                    },
+                    "status": {
+                      "type": "string"
+                    },
+                    "total_cents": {
+                      "type": "integer"
+                    }
+                  },
+                  "required": [
+                    "currency",
+                    "customer_tier",
+                    "order_id",
+                    "status",
+                    "total_cents"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}
