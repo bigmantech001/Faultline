@@ -1,0 +1,2963 @@
+{
+ "take_dir": "/private/tmp/claude-501/-Users-bigmantech001-Faultline/24ea2fa7-aaf2-4fa6-8efe-c0431050eb42/scratchpad/film/take2",
+ "recorded_utc": {
+  "start": "2026-11-08T18:28:05Z",
+  "end": "2026-11-08T18:42:29Z",
+  "cast_header_timestamp": 1794162530
+ },
+ "hermes": {
+  "version": "0.23.0",
+  "model": "claude-sonnet-4.6",
+  "home": "/private/tmp/claude-501/-Users-bigmantech001-Faultline/24ea2fa7-aaf2-4fa6-8efe-c0431050eb42/scratchpad/film-home",
+  "command": "hermes chat --in /Users/bigmantech001/Faultline/video/demo"
+ },
+ "terminal": {
+  "cols": 110,
+  "rows": 36,
+  "cast_seconds": 813.037
+ },
+ "proxy_url": "http://127.0.0.1:8700",
+ "active_proxies_rows": [
+  {
+   "listen_port": 8700,
+   "target_url": "http://127.0.0.1:8000",
+   "started_at": "2026-11-08T18:29:15.762421+00:00",
+   "pid": 10771
+  }
+ ],
+ "prompts": [
+  {
+   "text": "Our checkout service runs on http://127.0.0.1:8000. Some coupon checkouts fail with a 500 and I cannot see why. Put Faultline in front of it on port 8700 and tell me the proxy URL to point the storefront at.",
+   "cast_seconds": 5.128
+  },
+  {
+   "text": "The storefront just hit it. Find the failing request in Faultline, tell me exactly why it fails, and fix the cause in checkout_logic.py. The service hot-reloads. Then replay the failed trace to prove it.",
+   "cast_seconds": 108.123
+  },
+  {
+   "text": "Also check the orders route for contract drift, then add a chaos rule that makes POST /api/v1/webhooks/stripe answer 429 so we can test the retry path, and show me the learned OpenAPI contract.",
+   "cast_seconds": 479.277
+  }
+ ],
+ "tool_rows": [
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ curl -sS -o /dev/null -w 'upstream_status=%{http_code}\\n' --max-time 5 http://127.0.0.1:8000/ + 1 command  0.1s",
+   "cast_seconds": 20.938
+  },
+  {
+   "tool": "faultline_proxy",
+   "emoji": "\ud83d\udef0\ufe0f",
+   "label": "Faultline_proxy",
+   "cast_seconds": 25.69
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ for p in / /checkout /api/checkout + 3 commands  0.1s",
+   "cast_seconds": 29.652
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ curl -sS --max-time 5 http://127.0.0.1:8700/openapi.json | python3 -c \"import sys,json; d=json.load(sys.stdin); print('\\n'.join(sorted(d.get('paths',{}))))\" 2>/dev/null + 1 command  2.5s",
+   "cast_seconds": 36.424
+  },
+  {
+   "tool": "search_files",
+   "emoji": "\ud83d\udd0e",
+   "label": "Find (coupon|checkout)  0.6s",
+   "cast_seconds": 42.162
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ lsof -nP -iTCP:8000 -sTCP:LISTEN 2>/dev/null + 1 command  0.2s",
+   "cast_seconds": 47.69
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ ls -la /Users/bigmantech001/Faultline/video/demo",
+   "cast_seconds": 60.253
+  },
+  {
+   "tool": "search_files",
+   "emoji": "\ud83d\udd0e",
+   "label": "Grep coupon  0.2s",
+   "cast_seconds": 60.407
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read checkout_service.py",
+   "cast_seconds": 64.29
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read client.py",
+   "cast_seconds": 70.405
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ echo \"== healthy, no coupon\" + 3 commands  0.1s",
+   "cast_seconds": 70.557
+  },
+  {
+   "tool": "faultline_traces",
+   "emoji": "\ud83d\udce1",
+   "label": "Faultline_traces",
+   "cast_seconds": 74.063
+  },
+  {
+   "tool": "faultline_traces",
+   "emoji": "\ud83d\udce1",
+   "label": "Faultline_traces",
+   "cast_seconds": 118.736
+  },
+  {
+   "tool": "search_files",
+   "emoji": "\ud83d\udd0e",
+   "label": "Grep fee_ratio|calculate_fee_ratio|PLATFORM_FEE  11.7s",
+   "cast_seconds": 143.839
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read proxy_engine.py L1480-1569",
+   "cast_seconds": 151.643
+  },
+  {
+   "tool": "patch",
+   "emoji": "\ud83d\udd27",
+   "label": "Patch /Users/bigmantech001/Faultline/video/demo/checkout_logic.py",
+   "cast_seconds": 163.247
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ do printf '%-46s ' \"$body\" curl -sS -w ' [%{http_code}]\\n' -X POST http://127.0.0.1:8700/api/v1/checkout -H 'Content-Type: application/json' -d \"$body\" done  0.2s",
+   "cast_seconds": 168.356
+  },
+  {
+   "tool": "tool_details",
+   "emoji": "\ud83d\udcd6",
+   "label": "Reading tool details \u00b7 1 tool",
+   "cast_seconds": 172.907
+  },
+  {
+   "tool": "faultline_replay",
+   "emoji": "\ud83d\udd01",
+   "label": "Faultline_replay",
+   "cast_seconds": 176.302
+  },
+  {
+   "tool": "faultline_traces",
+   "emoji": "\ud83d\udce1",
+   "label": "Faultline_traces",
+   "cast_seconds": 181.784
+  },
+  {
+   "tool": "faultline_traces",
+   "emoji": "\ud83d\udce1",
+   "label": "Faultline_traces",
+   "cast_seconds": 190.639
+  },
+  {
+   "tool": "faultline_traces",
+   "emoji": "\ud83d\udce1",
+   "label": "Faultline_traces",
+   "cast_seconds": 494.226
+  },
+  {
+   "tool": "faultline_chaos",
+   "emoji": "\u26a1",
+   "label": "Faultline_chaos",
+   "cast_seconds": 500.937
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ echo \"== webhook (should be 429)\" + 5 commands  0.2s",
+   "cast_seconds": 507.626
+  },
+  {
+   "tool": "search_files",
+   "emoji": "\ud83d\udd0e",
+   "label": "Grep openapi|3\\.1\\.0|export_openapi  0.4s",
+   "cast_seconds": 515.62
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read tools.py L40-119",
+   "cast_seconds": 520.56
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read proxy_engine.py L877-981",
+   "cast_seconds": 526.744
+  },
+  {
+   "tool": "patch",
+   "emoji": "\ud83d\udd27",
+   "label": "Patch /Users/bigmantech001/Faultline/tools.py",
+   "cast_seconds": 535.688
+  },
+  {
+   "tool": "faultline_contract",
+   "emoji": "\ud83d\udcdc",
+   "label": "Faultline_contract",
+   "cast_seconds": 540.187
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ ls tests/ + 2 commands  0.2s",
+   "cast_seconds": 540.35
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ python3 -m unittest discover -s tests -t . -q  0.2s",
+   "cast_seconds": 545.723
+  },
+  {
+   "tool": "read_file",
+   "emoji": "\ud83d\udcd6",
+   "label": "Read test_faultline.py",
+   "cast_seconds": 553.944
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ python3 tests/test_faultline.py + 1 command  3.8s",
+   "cast_seconds": 581.793
+  },
+  {
+   "tool": "write_file",
+   "emoji": "\u270d\ufe0f",
+   "label": "Write /private/tmp/claude-501/-Users-bigmantech001-Faultline/24ea2fa7-aaf2-4fa6-8efe-c0431050eb42/scratchpad/film-home/cache/scratch/check_export.py",
+   "cast_seconds": 588.656
+  },
+  {
+   "tool": "terminal",
+   "emoji": "\ud83d\udcbb",
+   "label": "$ python3 /private/tmp/claude-501/-Users-bigmantech001-Faultline/24ea2fa7-aaf2-4fa6-8efe-c0431050eb42/scratchpad/film-home/cache/scratch/check_export.py  0.3s",
+   "cast_seconds": 610.404
+  }
+ ],
+ "agent_tool_calls": [
+  "terminal",
+  "faultline_proxy",
+  "terminal",
+  "terminal",
+  "search_files",
+  "terminal",
+  "terminal",
+  "search_files",
+  "read_file",
+  "read_file",
+  "terminal",
+  "faultline_traces",
+  "faultline_traces",
+  "search_files",
+  "read_file",
+  "patch",
+  "terminal",
+  "tool_details",
+  "faultline_replay",
+  "faultline_traces",
+  "faultline_traces",
+  "faultline_traces",
+  "faultline_chaos",
+  "terminal",
+  "search_files",
+  "read_file",
+  "read_file",
+  "patch",
+  "faultline_contract",
+  "terminal",
+  "terminal",
+  "read_file",
+  "terminal",
+  "write_file",
+  "terminal"
+ ],
+ "turn_footers": [
+  {
+   "turn_seconds": 70.0,
+   "summary": "read 1 skill, 3 files \u00b7 ran 7 commands \u00b7 searched 3 paths \u00b7 called 5 tools",
+   "tools_called": 5,
+   "clock": "7:30 PM",
+   "cast_seconds": 81.069
+  },
+  {
+   "turn_seconds": 97.0,
+   "summary": "edited 1 file +10 -4 \u00b7 read 2 files \u00b7 ran 2 commands \u00b7 searched 1 path \u00b7 +1 more",
+   "tools_called": 0,
+   "clock": "7:32 PM",
+   "cast_seconds": 210.157
+  },
+  {
+   "turn_seconds": 163.0,
+   "summary": "edited 2 files +11 -0 \u00b7 read 5 files \u00b7 ran 6 commands \u00b7 searched 1 path \u00b7 +1 more",
+   "tools_called": 0,
+   "clock": "7:39 PM",
+   "cast_seconds": 647.253
+  }
+ ],
+ "traces": [
+  {
+   "trace_id": "flt-10f574ca",
+   "method": "GET",
+   "path": "/",
+   "normalized_path": "/",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 404,
+   "response_body": "{\"error\": \"not_found\", \"path\": \"/\"}",
+   "latency_ms": 11.24,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:29:19.672527+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:29:19 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "35"
+   }
+  },
+  {
+   "trace_id": "flt-deb50640",
+   "method": "GET",
+   "path": "/checkout",
+   "normalized_path": "/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 404,
+   "response_body": "{\"error\": \"not_found\", \"path\": \"/checkout\"}",
+   "latency_ms": 0.58,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:29:19.685746+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:29:19 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "43"
+   }
+  },
+  {
+   "trace_id": "flt-8b2ae441",
+   "method": "GET",
+   "path": "/api/checkout",
+   "normalized_path": "/api/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 404,
+   "response_body": "{\"error\": \"not_found\", \"path\": \"/api/checkout\"}",
+   "latency_ms": 2.61,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:29:19.699357+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:29:19 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "47"
+   }
+  },
+  {
+   "trace_id": "flt-2cd5db9a",
+   "method": "GET",
+   "path": "/openapi.json",
+   "normalized_path": "/openapi.json",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 404,
+   "response_body": "{\"error\": \"not_found\", \"path\": \"/openapi.json\"}",
+   "latency_ms": 2.41,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:29:26.437504+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:29:26 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "47"
+   }
+  },
+  {
+   "trace_id": "flt-dd7f1ea9",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 12500, \"discount_cents\": 0, \"net_payable_cents\": 12500, \"fee_ratio\": 0.012, \"status\": \"settled\"}",
+   "latency_ms": 2.58,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.568928+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "24"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "158"
+   }
+  },
+  {
+   "trace_id": "flt-8497bf4b",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 12500, \"discount_cents\": 1250, \"net_payable_cents\": 11250, \"fee_ratio\": 0.0133, \"status\": \"settled\"}",
+   "latency_ms": 0.76,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.581603+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "45"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "169"
+   }
+  },
+  {
+   "trace_id": "flt-d4fe62ad",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 500,
+   "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+   "latency_ms": 1.31,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.594579+00:00",
+   "drifts": [
+    {
+     "kind": "server_error_5xx",
+     "field": "$status",
+     "expected": 200,
+     "actual": 500,
+     "severity": "critical",
+     "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "47"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "141"
+   }
+  },
+  {
+   "trace_id": "flt-7bf2ce5b",
+   "method": "GET",
+   "path": "/api/v1/orders/101",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+   "latency_ms": 2.37,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:14.237638+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:14 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "118"
+   }
+  },
+  {
+   "trace_id": "flt-0867aaa6",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"discount_cents\": 0, \"coupon\": \"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"settled\"}",
+   "latency_ms": 0.8,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:14.242103+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "68",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:14 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "166"
+   }
+  },
+  {
+   "trace_id": "flt-ccd279fc",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 12000, \"coupon\": \"\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 12000, \"discount_cents\": 0, \"net_payable_cents\": 12000, \"fee_ratio\": 0.0125, \"status\": \"settled\"}",
+   "latency_ms": 0.46,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:14.245550+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "39",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:14 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "159"
+   }
+  },
+  {
+   "trace_id": "flt-92e75bfe",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+   "response_status": 500,
+   "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+   "latency_ms": 1.16,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:20.228702+00:00",
+   "drifts": [
+    {
+     "kind": "server_error_5xx",
+     "field": "$status",
+     "expected": 200,
+     "actual": 500,
+     "severity": "critical",
+     "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "49",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:20 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "141"
+   }
+  },
+  {
+   "trace_id": "flt-e91f666f",
+   "method": "GET",
+   "path": "/api/v1/orders/101",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+   "latency_ms": 0.72,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:26.237438+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:26 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "118"
+   }
+  },
+  {
+   "trace_id": "flt-611b7ca7",
+   "method": "GET",
+   "path": "/api/v1/orders/102",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_102\", \"customer_tier\": \"pro\", \"total_cents\": \"twelve-thousand-five-hundred\", \"status\": \"pending_review\"}",
+   "latency_ms": 1.8,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:26.243018+00:00",
+   "drifts": [
+    {
+     "kind": "missing_required_field",
+     "field": "$.currency",
+     "expected": "string",
+     "actual": "missing",
+     "severity": "high",
+     "message": "Required field `$.currency` is missing from response."
+    },
+    {
+     "kind": "type_mismatch",
+     "field": "$.total_cents",
+     "expected": "integer",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.total_cents` changed type from `integer` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:26 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "122"
+   }
+  },
+  {
+   "trace_id": "flt-25520a24",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":5000,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 5000, \"discount_cents\": 5000, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 5.79,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.329049+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "46"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "163"
+   }
+  },
+  {
+   "trace_id": "flt-40c6af10",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 12500, \"discount_cents\": 1250, \"net_payable_cents\": 11250, \"fee_ratio\": 0.0133, \"status\": \"settled\"}",
+   "latency_ms": 0.68,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.345317+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "45"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "169"
+   }
+  },
+  {
+   "trace_id": "flt-6abc944d",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 12500, \"discount_cents\": 0, \"net_payable_cents\": 12500, \"fee_ratio\": 0.012, \"status\": \"settled\"}",
+   "latency_ms": 0.93,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.360583+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "24"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "158"
+   }
+  },
+  {
+   "trace_id": "flt-5849945d",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":0,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 0, \"discount_cents\": 0, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 0.66,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.370950+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "43"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "157"
+   }
+  },
+  {
+   "trace_id": "flt-fac1aa40",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":0}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 0, \"discount_cents\": 0, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 0.66,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.383276+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "20"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "148"
+   }
+  },
+  {
+   "trace_id": "flt-33cbbabc",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 5000, \"discount_cents\": 5000, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 1.8,
+   "chaos_rule_id": "",
+   "replayed_from": "flt-92e75bfe",
+   "created_at": "2026-11-08T18:31:46.373712+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:46 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "163"
+   }
+  },
+  {
+   "trace_id": "flt-1c40cc8f",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 12500, \"discount_cents\": 12500, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 22.49,
+   "chaos_rule_id": "",
+   "replayed_from": "flt-d4fe62ad",
+   "created_at": "2026-11-08T18:36:43.526558+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:36:43 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "165"
+   }
+  },
+  {
+   "trace_id": "flt-81b05cfe",
+   "method": "POST",
+   "path": "/api/v1/webhooks/stripe",
+   "normalized_path": "/api/v1/webhooks/stripe",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"event_id\": \"evt_1NirvAnA\", \"type\": \"payment_intent.succeeded\"}",
+   "response_status": 429,
+   "response_body": "{\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}",
+   "latency_ms": 0.83,
+   "chaos_rule_id": "chaos-688910",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:13.389617+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "64",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Content-Type": "application/json",
+    "X-Faultline-Chaos": "chaos-688910"
+   }
+  },
+  {
+   "trace_id": "flt-05bb1e7b",
+   "method": "POST",
+   "path": "/api/v1/webhooks/stripe",
+   "normalized_path": "/api/v1/webhooks/stripe",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"event_id\":\"evt_1NirvAnA\",\"type\":\"payment_intent.succeeded\"}",
+   "response_status": 429,
+   "response_body": "{\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}",
+   "latency_ms": 0.42,
+   "chaos_rule_id": "chaos-688910",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:17.632055+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "61"
+   },
+   "response_headers": {
+    "Content-Type": "application/json",
+    "X-Faultline-Chaos": "chaos-688910"
+   }
+  },
+  {
+   "trace_id": "flt-61aff6d6",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":5000,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"settled\"}",
+   "latency_ms": 5.38,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:17.650479+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "44"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "166"
+   }
+  },
+  {
+   "trace_id": "flt-ef402b8b",
+   "method": "GET",
+   "path": "/api/v1/orders/101",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+   "latency_ms": 1.66,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:17.663253+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "118"
+   }
+  },
+  {
+   "trace_id": "flt-144637f5",
+   "method": "GET",
+   "path": "/api/v1/webhooks/stripe",
+   "normalized_path": "/api/v1/webhooks/stripe",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 404,
+   "response_body": "{\"error\": \"not_found\", \"path\": \"/api/v1/webhooks/stripe\"}",
+   "latency_ms": 1.09,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:17.676955+00:00",
+   "drifts": [],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "57"
+   }
+  }
+ ],
+ "failing_trace": {
+  "trace_id": "flt-92e75bfe",
+  "method": "POST",
+  "path": "/api/v1/checkout",
+  "normalized_path": "/api/v1/checkout",
+  "query_string": "",
+  "target_url": "http://127.0.0.1:8000",
+  "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+  "response_status": 500,
+  "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+  "latency_ms": 1.16,
+  "chaos_rule_id": "",
+  "replayed_from": "",
+  "created_at": "2026-11-08T18:30:20.228702+00:00",
+  "drifts": [
+   {
+    "kind": "server_error_5xx",
+    "field": "$status",
+    "expected": 200,
+    "actual": 500,
+    "severity": "critical",
+    "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+   }
+  ],
+  "request_headers": {
+   "Accept-Encoding": "identity",
+   "Content-Length": "49",
+   "Host": "127.0.0.1:8700",
+   "User-Agent": "Python-urllib/3.14",
+   "Content-Type": "application/json",
+   "Authorization": "[REDACTED]",
+   "Connection": "close"
+  },
+  "response_headers": {
+   "Server": "checkout/1.4 Python/3.14.6",
+   "Date": "Sun, 08 Nov 2026 18:30:20 GMT",
+   "Content-Type": "application/json",
+   "Content-Length": "141"
+  }
+ },
+ "reproduced_by_agent_5xx": [
+  {
+   "trace_id": "flt-d4fe62ad",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 500,
+   "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+   "latency_ms": 1.31,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.594579+00:00",
+   "drifts": [
+    {
+     "kind": "server_error_5xx",
+     "field": "$status",
+     "expected": 200,
+     "actual": 500,
+     "severity": "critical",
+     "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "47"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "141"
+   }
+  }
+ ],
+ "checkout_logic_patch": "--- a/checkout_logic.py\n+++ b/checkout_logic.py\n@@ -14,8 +14,14 @@\n }\n \n \n-def calculate_fee_ratio(subtotal_cents: int, net_payable_cents: int) -> float:\n-    \"\"\"Platform fee as a share of what the customer actually pays.\"\"\"\n+def calculate_fee_ratio(net_payable_cents: int) -> float:\n+    \"\"\"Platform fee as a share of what the customer actually pays.\n+\n+    A fully discounted order leaves nothing to pay, so there is no share to\n+    compute; report 0.0 instead of dividing by zero.\n+    \"\"\"\n+    if net_payable_cents <= 0:\n+        return 0.0\n     return round(PLATFORM_FEE_CENTS / net_payable_cents, 4)\n \n \n@@ -23,14 +29,14 @@\n     subtotal = int(data.get(\"subtotal_cents\", 0))\n     coupon = str(data.get(\"coupon\") or \"\").upper()\n     discount = int(round(subtotal * COUPONS.get(coupon, 0.0)))\n-    net_payable = subtotal - discount\n+    net_payable = max(0, subtotal - discount)\n     return {\n         \"checkout_id\": \"chk_9001\",\n         \"coupon\": coupon or None,\n         \"subtotal_cents\": subtotal,\n         \"discount_cents\": discount,\n         \"net_payable_cents\": net_payable,\n-        \"fee_ratio\": calculate_fee_ratio(subtotal, net_payable),\n+        \"fee_ratio\": calculate_fee_ratio(net_payable),\n         \"status\": \"settled\",\n     }\n \n",
+ "approvals_answered_by_recorder": {
+  "approval.1": 35.708,
+  "approval.2": 547.825,
+  "approval.3": 618.888
+ },
+ "studio_stills": [
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/chaos-inspector.png",
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/final.png",
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/fix-banner.png",
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/fix-waterfall.png",
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/see-inspector.png",
+  "/Users/bigmantech001/Faultline/video/.cache/frames/studio-stills/see-waterfall.png"
+ ],
+ "replays": [
+  {
+   "replay_id": "rpl-e7b938ad",
+   "original_trace_id": "flt-92e75bfe",
+   "replay_trace_id": "flt-33cbbabc",
+   "target_url": "http://127.0.0.1:8000",
+   "old_status": 500,
+   "new_status": 200,
+   "old_latency_ms": 1.16,
+   "new_latency_ms": 1.8,
+   "resolved_error": 1,
+   "created_at": "2026-11-08T18:31:46.377695+00:00",
+   "diff_summary": {
+    "status_transition": "500 -> 200",
+    "resolved_error": true,
+    "latency_delta_ms": 0.64,
+    "old_json_keys": [
+     "detail",
+     "endpoint",
+     "error"
+    ],
+    "new_json_keys": [
+     "checkout_id",
+     "coupon",
+     "discount_cents",
+     "fee_ratio",
+     "net_payable_cents",
+     "status",
+     "subtotal_cents"
+    ],
+    "drifts_remaining": 1
+   }
+  },
+  {
+   "replay_id": "rpl-351526f1",
+   "original_trace_id": "flt-d4fe62ad",
+   "replay_trace_id": "flt-1c40cc8f",
+   "target_url": "http://127.0.0.1:8000",
+   "old_status": 500,
+   "new_status": 200,
+   "old_latency_ms": 1.31,
+   "new_latency_ms": 22.49,
+   "resolved_error": 1,
+   "created_at": "2026-11-08T18:36:43.546137+00:00",
+   "diff_summary": {
+    "status_transition": "500 -> 200",
+    "resolved_error": true,
+    "latency_delta_ms": 21.18,
+    "old_json_keys": [
+     "detail",
+     "endpoint",
+     "error"
+    ],
+    "new_json_keys": [
+     "checkout_id",
+     "coupon",
+     "discount_cents",
+     "fee_ratio",
+     "net_payable_cents",
+     "status",
+     "subtotal_cents"
+    ],
+    "drifts_remaining": 1
+   }
+  }
+ ],
+ "drift_traces": [
+  {
+   "trace_id": "flt-8497bf4b",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 12500, \"discount_cents\": 1250, \"net_payable_cents\": 11250, \"fee_ratio\": 0.0133, \"status\": \"settled\"}",
+   "latency_ms": 0.76,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.581603+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "45"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "169"
+   }
+  },
+  {
+   "trace_id": "flt-d4fe62ad",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 500,
+   "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+   "latency_ms": 1.31,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:00.594579+00:00",
+   "drifts": [
+    {
+     "kind": "server_error_5xx",
+     "field": "$status",
+     "expected": 200,
+     "actual": 500,
+     "severity": "critical",
+     "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "47"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:00 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "141"
+   }
+  },
+  {
+   "trace_id": "flt-0867aaa6",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"discount_cents\": 0, \"coupon\": \"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"settled\"}",
+   "latency_ms": 0.8,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:14.242103+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "68",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:14 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "166"
+   }
+  },
+  {
+   "trace_id": "flt-92e75bfe",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+   "response_status": 500,
+   "response_body": "{\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}",
+   "latency_ms": 1.16,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:20.228702+00:00",
+   "drifts": [
+    {
+     "kind": "server_error_5xx",
+     "field": "$status",
+     "expected": 200,
+     "actual": 500,
+     "severity": "critical",
+     "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Content-Length": "49",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:20 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "141"
+   }
+  },
+  {
+   "trace_id": "flt-611b7ca7",
+   "method": "GET",
+   "path": "/api/v1/orders/102",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_102\", \"customer_tier\": \"pro\", \"total_cents\": \"twelve-thousand-five-hundred\", \"status\": \"pending_review\"}",
+   "latency_ms": 1.8,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:26.243018+00:00",
+   "drifts": [
+    {
+     "kind": "missing_required_field",
+     "field": "$.currency",
+     "expected": "string",
+     "actual": "missing",
+     "severity": "high",
+     "message": "Required field `$.currency` is missing from response."
+    },
+    {
+     "kind": "type_mismatch",
+     "field": "$.total_cents",
+     "expected": "integer",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.total_cents` changed type from `integer` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:26 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "122"
+   }
+  },
+  {
+   "trace_id": "flt-25520a24",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":5000,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 5000, \"discount_cents\": 5000, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 5.79,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.329049+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "46"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "163"
+   }
+  },
+  {
+   "trace_id": "flt-40c6af10",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 12500, \"discount_cents\": 1250, \"net_payable_cents\": 11250, \"fee_ratio\": 0.0133, \"status\": \"settled\"}",
+   "latency_ms": 0.68,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.345317+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "45"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "169"
+   }
+  },
+  {
+   "trace_id": "flt-5849945d",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":0,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 0, \"discount_cents\": 0, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 0.66,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:31:38.370950+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "43"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "157"
+   }
+  },
+  {
+   "trace_id": "flt-33cbbabc",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 5000, \"discount_cents\": 5000, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 1.8,
+   "chaos_rule_id": "",
+   "replayed_from": "flt-92e75bfe",
+   "created_at": "2026-11-08T18:31:46.373712+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:31:46 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "163"
+   }
+  },
+  {
+   "trace_id": "flt-1c40cc8f",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 12500, \"discount_cents\": 12500, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+   "latency_ms": 22.49,
+   "chaos_rule_id": "",
+   "replayed_from": "flt-d4fe62ad",
+   "created_at": "2026-11-08T18:36:43.526558+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:36:43 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "165"
+   }
+  },
+  {
+   "trace_id": "flt-61aff6d6",
+   "method": "POST",
+   "path": "/api/v1/checkout",
+   "normalized_path": "/api/v1/checkout",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "{\"subtotal_cents\":5000,\"coupon\":\"WELCOME10\"}",
+   "response_status": 200,
+   "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"settled\"}",
+   "latency_ms": 5.38,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:37:17.650479+00:00",
+   "drifts": [
+    {
+     "kind": "type_mismatch",
+     "field": "$.coupon",
+     "expected": "null",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.coupon` changed type from `null` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "curl/8.7.1",
+    "Accept": "*/*",
+    "Content-Type": "application/json",
+    "Content-Length": "44"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "166"
+   }
+  }
+ ],
+ "orders_102": [
+  {
+   "trace_id": "flt-611b7ca7",
+   "method": "GET",
+   "path": "/api/v1/orders/102",
+   "normalized_path": "/api/v1/orders/{id}",
+   "query_string": "",
+   "target_url": "http://127.0.0.1:8000",
+   "request_body": "",
+   "response_status": 200,
+   "response_body": "{\"order_id\": \"ord_102\", \"customer_tier\": \"pro\", \"total_cents\": \"twelve-thousand-five-hundred\", \"status\": \"pending_review\"}",
+   "latency_ms": 1.8,
+   "chaos_rule_id": "",
+   "replayed_from": "",
+   "created_at": "2026-11-08T18:30:26.243018+00:00",
+   "drifts": [
+    {
+     "kind": "missing_required_field",
+     "field": "$.currency",
+     "expected": "string",
+     "actual": "missing",
+     "severity": "high",
+     "message": "Required field `$.currency` is missing from response."
+    },
+    {
+     "kind": "type_mismatch",
+     "field": "$.total_cents",
+     "expected": "integer",
+     "actual": "string",
+     "severity": "high",
+     "message": "Field `$.total_cents` changed type from `integer` to `string`."
+    }
+   ],
+   "request_headers": {
+    "Accept-Encoding": "identity",
+    "Host": "127.0.0.1:8700",
+    "User-Agent": "Python-urllib/3.14",
+    "Content-Type": "application/json",
+    "Authorization": "[REDACTED]",
+    "Connection": "close"
+   },
+   "response_headers": {
+    "Server": "checkout/1.4 Python/3.14.6",
+    "Date": "Sun, 08 Nov 2026 18:30:26 GMT",
+    "Content-Type": "application/json",
+    "Content-Length": "122"
+   }
+  }
+ ],
+ "chaos_rules": [
+  {
+   "rule_id": "chaos-688910",
+   "method": "POST",
+   "path_pattern": "/api/v1/webhooks/stripe",
+   "fault_type": "status_code",
+   "status_code": 429,
+   "latency_ms": 0,
+   "probability": 1.0,
+   "response_body": "{\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}",
+   "hits": 2,
+   "created_at": "2026-11-08T18:37:11.003810+00:00"
+  }
+ ],
+ "contracts": [
+  {
+   "contract_key": "POST /api/v1/checkout",
+   "method": "POST",
+   "normalized_path": "/api/v1/checkout",
+   "expected_status": 200,
+   "baseline_latency_ms": 1.16,
+   "sample_count": 4,
+   "updated_at": "2026-11-08T18:31:38.383276+00:00"
+  },
+  {
+   "contract_key": "GET /api/v1/orders/{id}",
+   "method": "GET",
+   "normalized_path": "/api/v1/orders/{id}",
+   "expected_status": 200,
+   "baseline_latency_ms": 1.58,
+   "sample_count": 3,
+   "updated_at": "2026-11-08T18:37:17.663253+00:00"
+  }
+ ],
+ "contract_keys": [
+  "POST /api/v1/checkout",
+  "GET /api/v1/orders/{id}"
+ ],
+ "cli": {
+  "status": {
+   "ok": true,
+   "active_proxies": [
+    {
+     "listen_host": "127.0.0.1",
+     "listen_port": 8700,
+     "proxy_url": "http://127.0.0.1:8700",
+     "target_url": "http://127.0.0.1:8000",
+     "started_at": "2026-11-08T18:29:15.762421+00:00",
+     "pid": 10771,
+     "owner": "other-process"
+    }
+   ],
+   "summary": {
+    "total_traces": 25,
+    "count_5xx": 2,
+    "count_4xx": 7,
+    "drift_traces": 11,
+    "avg_latency_ms": 2.85
+   },
+   "contract_count": 2,
+   "chaos_rule_count": 1,
+   "recent_traces": [
+    {
+     "trace_id": "flt-144637f5",
+     "method": "GET",
+     "path": "/api/v1/webhooks/stripe",
+     "normalized_path": "/api/v1/webhooks/stripe",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*"
+     },
+     "request_body": "",
+     "response_status": 404,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "57"
+     },
+     "response_body": "{\"error\": \"not_found\", \"path\": \"/api/v1/webhooks/stripe\"}",
+     "latency_ms": 1.09,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "error": {
+        "type": "string"
+       },
+       "path": {
+        "type": "string"
+       }
+      },
+      "required": [
+       "error",
+       "path"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:37:17.676955+00:00",
+     "directive": "::faultline-trace{id=\"flt-144637f5\"}"
+    },
+    {
+     "trace_id": "flt-ef402b8b",
+     "method": "GET",
+     "path": "/api/v1/orders/101",
+     "normalized_path": "/api/v1/orders/{id}",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*"
+     },
+     "request_body": "",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "118"
+     },
+     "response_body": "{\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+     "latency_ms": 1.66,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "currency": {
+        "type": "string"
+       },
+       "customer_tier": {
+        "type": "string"
+       },
+       "order_id": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "total_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "currency",
+       "customer_tier",
+       "order_id",
+       "status",
+       "total_cents"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:37:17.663253+00:00",
+     "directive": "::faultline-trace{id=\"flt-ef402b8b\"}"
+    },
+    {
+     "trace_id": "flt-61aff6d6",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "44"
+     },
+     "request_body": "{\"subtotal_cents\":5000,\"coupon\":\"WELCOME10\"}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:37:17 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "166"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"settled\"}",
+     "latency_ms": 5.38,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "string"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "coupon",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:37:17.650479+00:00",
+     "directive": "::faultline-trace{id=\"flt-61aff6d6\"}"
+    },
+    {
+     "trace_id": "flt-05bb1e7b",
+     "method": "POST",
+     "path": "/api/v1/webhooks/stripe",
+     "normalized_path": "/api/v1/webhooks/stripe",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "61"
+     },
+     "request_body": "{\"event_id\":\"evt_1NirvAnA\",\"type\":\"payment_intent.succeeded\"}",
+     "response_status": 429,
+     "response_headers": {
+      "Content-Type": "application/json",
+      "X-Faultline-Chaos": "chaos-688910"
+     },
+     "response_body": "{\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}",
+     "latency_ms": 0.42,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "error": {
+        "type": "string"
+       },
+       "fault_type": {
+        "type": "string"
+       },
+       "rule_id": {
+        "type": "string"
+       },
+       "status_code": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "error",
+       "fault_type",
+       "rule_id",
+       "status_code"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "chaos-688910",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:37:17.632055+00:00",
+     "directive": "::faultline-trace{id=\"flt-05bb1e7b\"}"
+    },
+    {
+     "trace_id": "flt-81b05cfe",
+     "method": "POST",
+     "path": "/api/v1/webhooks/stripe",
+     "normalized_path": "/api/v1/webhooks/stripe",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Accept-Encoding": "identity",
+      "Content-Length": "64",
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "Python-urllib/3.14",
+      "Content-Type": "application/json",
+      "Authorization": "[REDACTED]",
+      "Connection": "close"
+     },
+     "request_body": "{\"event_id\": \"evt_1NirvAnA\", \"type\": \"payment_intent.succeeded\"}",
+     "response_status": 429,
+     "response_headers": {
+      "Content-Type": "application/json",
+      "X-Faultline-Chaos": "chaos-688910"
+     },
+     "response_body": "{\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}",
+     "latency_ms": 0.83,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "error": {
+        "type": "string"
+       },
+       "fault_type": {
+        "type": "string"
+       },
+       "rule_id": {
+        "type": "string"
+       },
+       "status_code": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "error",
+       "fault_type",
+       "rule_id",
+       "status_code"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "chaos-688910",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:37:13.389617+00:00",
+     "directive": "::faultline-trace{id=\"flt-81b05cfe\"}"
+    },
+    {
+     "trace_id": "flt-1c40cc8f",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json"
+     },
+     "request_body": "{\"subtotal_cents\":12500,\"coupon\":\"FOUNDERS100\"}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:36:43 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "165"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 12500, \"discount_cents\": 12500, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+     "latency_ms": 22.49,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "string"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "coupon",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "chaos_rule_id": "",
+     "replayed_from": "flt-d4fe62ad",
+     "created_at": "2026-11-08T18:36:43.526558+00:00",
+     "directive": "::faultline-trace{id=\"flt-1c40cc8f\"}"
+    },
+    {
+     "trace_id": "flt-33cbbabc",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Accept-Encoding": "identity",
+      "User-Agent": "Python-urllib/3.14",
+      "Content-Type": "application/json"
+     },
+     "request_body": "{\"subtotal_cents\": 5000, \"coupon\": \"FOUNDERS100\"}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:31:46 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "163"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 5000, \"discount_cents\": 5000, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+     "latency_ms": 1.8,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "string"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "coupon",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "chaos_rule_id": "",
+     "replayed_from": "flt-92e75bfe",
+     "created_at": "2026-11-08T18:31:46.373712+00:00",
+     "directive": "::faultline-trace{id=\"flt-33cbbabc\"}"
+    },
+    {
+     "trace_id": "flt-fac1aa40",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "20"
+     },
+     "request_body": "{\"subtotal_cents\":0}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "148"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 0, \"discount_cents\": 0, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+     "latency_ms": 0.66,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "null"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:31:38.383276+00:00",
+     "directive": "::faultline-trace{id=\"flt-fac1aa40\"}"
+    },
+    {
+     "trace_id": "flt-5849945d",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "43"
+     },
+     "request_body": "{\"subtotal_cents\":0,\"coupon\":\"FOUNDERS100\"}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "157"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": \"FOUNDERS100\", \"subtotal_cents\": 0, \"discount_cents\": 0, \"net_payable_cents\": 0, \"fee_ratio\": 0.0, \"status\": \"settled\"}",
+     "latency_ms": 0.66,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "string"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "coupon",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:31:38.370950+00:00",
+     "directive": "::faultline-trace{id=\"flt-5849945d\"}"
+    },
+    {
+     "trace_id": "flt-6abc944d",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "normalized_path": "/api/v1/checkout",
+     "query_string": "",
+     "target_url": "http://127.0.0.1:8000",
+     "request_headers": {
+      "Host": "127.0.0.1:8700",
+      "User-Agent": "curl/8.7.1",
+      "Accept": "*/*",
+      "Content-Type": "application/json",
+      "Content-Length": "24"
+     },
+     "request_body": "{\"subtotal_cents\":12500}",
+     "response_status": 200,
+     "response_headers": {
+      "Server": "checkout/1.4 Python/3.14.6",
+      "Date": "Sun, 08 Nov 2026 18:31:38 GMT",
+      "Content-Type": "application/json",
+      "Content-Length": "158"
+     },
+     "response_body": "{\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 12500, \"discount_cents\": 0, \"net_payable_cents\": 12500, \"fee_ratio\": 0.012, \"status\": \"settled\"}",
+     "latency_ms": 0.93,
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "null"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "drifts": [],
+     "chaos_rule_id": "",
+     "replayed_from": "",
+     "created_at": "2026-11-08T18:31:38.360583+00:00",
+     "directive": "::faultline-trace{id=\"flt-6abc944d\"}"
+    }
+   ]
+  },
+  "contracts": {
+   "ok": true,
+   "contract_count": 2,
+   "drift_trace_count": 11,
+   "contracts": [
+    {
+     "contract_key": "POST /api/v1/checkout",
+     "method": "POST",
+     "normalized_path": "/api/v1/checkout",
+     "expected_status": 200,
+     "request_schema": {
+      "type": "object",
+      "properties": {
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "subtotal_cents"
+      ]
+     },
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "checkout_id": {
+        "type": "string"
+       },
+       "coupon": {
+        "type": "null"
+       },
+       "discount_cents": {
+        "type": "integer"
+       },
+       "fee_ratio": {
+        "type": "number"
+       },
+       "net_payable_cents": {
+        "type": "integer"
+       },
+       "status": {
+        "type": "string"
+       },
+       "subtotal_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "checkout_id",
+       "discount_cents",
+       "fee_ratio",
+       "net_payable_cents",
+       "status",
+       "subtotal_cents"
+      ]
+     },
+     "baseline_latency_ms": 1.16,
+     "sample_count": 4,
+     "updated_at": "2026-11-08T18:31:38.383276+00:00"
+    },
+    {
+     "contract_key": "GET /api/v1/orders/{id}",
+     "method": "GET",
+     "normalized_path": "/api/v1/orders/{id}",
+     "expected_status": 200,
+     "request_schema": {},
+     "response_schema": {
+      "type": "object",
+      "properties": {
+       "currency": {
+        "type": "string"
+       },
+       "customer_tier": {
+        "type": "string"
+       },
+       "order_id": {
+        "type": "string"
+       },
+       "status": {
+        "type": "string"
+       },
+       "total_cents": {
+        "type": "integer"
+       }
+      },
+      "required": [
+       "currency",
+       "customer_tier",
+       "order_id",
+       "status",
+       "total_cents"
+      ]
+     },
+     "baseline_latency_ms": 1.58,
+     "sample_count": 3,
+     "updated_at": "2026-11-08T18:37:17.663253+00:00"
+    }
+   ],
+   "recent_drifts": [
+    {
+     "trace_id": "flt-61aff6d6",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:37:17.650479+00:00"
+    },
+    {
+     "trace_id": "flt-1c40cc8f",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:36:43.526558+00:00"
+    },
+    {
+     "trace_id": "flt-33cbbabc",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:31:46.373712+00:00"
+    },
+    {
+     "trace_id": "flt-5849945d",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:31:38.370950+00:00"
+    },
+    {
+     "trace_id": "flt-40c6af10",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:31:38.345317+00:00"
+    },
+    {
+     "trace_id": "flt-25520a24",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:31:38.329049+00:00"
+    },
+    {
+     "trace_id": "flt-611b7ca7",
+     "method": "GET",
+     "path": "/api/v1/orders/102",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "missing_required_field",
+       "field": "$.currency",
+       "expected": "string",
+       "actual": "missing",
+       "severity": "high",
+       "message": "Required field `$.currency` is missing from response."
+      },
+      {
+       "kind": "type_mismatch",
+       "field": "$.total_cents",
+       "expected": "integer",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.total_cents` changed type from `integer` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:30:26.243018+00:00"
+    },
+    {
+     "trace_id": "flt-92e75bfe",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 500,
+     "drifts": [
+      {
+       "kind": "server_error_5xx",
+       "field": "$status",
+       "expected": 200,
+       "actual": 500,
+       "severity": "critical",
+       "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+      }
+     ],
+     "created_at": "2026-11-08T18:30:20.228702+00:00"
+    },
+    {
+     "trace_id": "flt-0867aaa6",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:30:14.242103+00:00"
+    },
+    {
+     "trace_id": "flt-d4fe62ad",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 500,
+     "drifts": [
+      {
+       "kind": "server_error_5xx",
+       "field": "$status",
+       "expected": 200,
+       "actual": 500,
+       "severity": "critical",
+       "message": "Endpoint `POST /api/v1/checkout` returned HTTP 500."
+      }
+     ],
+     "created_at": "2026-11-08T18:30:00.594579+00:00"
+    },
+    {
+     "trace_id": "flt-8497bf4b",
+     "method": "POST",
+     "path": "/api/v1/checkout",
+     "status": 200,
+     "drifts": [
+      {
+       "kind": "type_mismatch",
+       "field": "$.coupon",
+       "expected": "null",
+       "actual": "string",
+       "severity": "high",
+       "message": "Field `$.coupon` changed type from `null` to `string`."
+      }
+     ],
+     "created_at": "2026-11-08T18:30:00.581603+00:00"
+    }
+   ],
+   "openapi": {
+    "openapi": "3.1.0",
+    "info": {
+     "title": "Faultline Learned Service Contract",
+     "version": "1.0.0",
+     "description": "Automatically synthesized by Hermes Faultline Flight Recorder."
+    },
+    "paths": {
+     "/api/v1/checkout": {
+      "post": {
+       "summary": "Observed POST /api/v1/checkout (4 baseline samples)",
+       "x-faultline-baseline-latency-ms": 1.16,
+       "responses": {
+        "200": {
+         "description": "Baseline observed response schema",
+         "content": {
+          "application/json": {
+           "schema": {
+            "type": "object",
+            "properties": {
+             "checkout_id": {
+              "type": "string"
+             },
+             "coupon": {
+              "type": "null"
+             },
+             "discount_cents": {
+              "type": "integer"
+             },
+             "fee_ratio": {
+              "type": "number"
+             },
+             "net_payable_cents": {
+              "type": "integer"
+             },
+             "status": {
+              "type": "string"
+             },
+             "subtotal_cents": {
+              "type": "integer"
+             }
+            },
+            "required": [
+             "checkout_id",
+             "discount_cents",
+             "fee_ratio",
+             "net_payable_cents",
+             "status",
+             "subtotal_cents"
+            ]
+           }
+          }
+         }
+        }
+       },
+       "requestBody": {
+        "required": true,
+        "content": {
+         "application/json": {
+          "schema": {
+           "type": "object",
+           "properties": {
+            "subtotal_cents": {
+             "type": "integer"
+            }
+           },
+           "required": [
+            "subtotal_cents"
+           ]
+          }
+         }
+        }
+       }
+      }
+     },
+     "/api/v1/orders/{id}": {
+      "get": {
+       "summary": "Observed GET /api/v1/orders/{id} (3 baseline samples)",
+       "x-faultline-baseline-latency-ms": 1.58,
+       "responses": {
+        "200": {
+         "description": "Baseline observed response schema",
+         "content": {
+          "application/json": {
+           "schema": {
+            "type": "object",
+            "properties": {
+             "currency": {
+              "type": "string"
+             },
+             "customer_tier": {
+              "type": "string"
+             },
+             "order_id": {
+              "type": "string"
+             },
+             "status": {
+              "type": "string"
+             },
+             "total_cents": {
+              "type": "integer"
+             }
+            },
+            "required": [
+             "currency",
+             "customer_tier",
+             "order_id",
+             "status",
+             "total_cents"
+            ]
+           }
+          }
+         }
+        }
+       }
+      }
+     }
+    }
+   }
+  }
+ },
+ "traffic": {
+  "baseline": [
+   "GET  /api/v1/orders/101           -> 200  [flt-7bf2ce5b]",
+   "     {\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+   "POST /api/v1/checkout             -> 200  [flt-0867aaa6]",
+   "     {\"checkout_id\": \"chk_9001\", \"coupon\": \"WELCOME10\", \"subtotal_cents\": 5000, \"discount_cents\": 500, \"net_payable_cents\": 4500, \"fee_ratio\": 0.0333, \"status\": \"set",
+   "POST /api/v1/checkout             -> 200  [flt-ccd279fc]",
+   "     {\"checkout_id\": \"chk_9001\", \"coupon\": null, \"subtotal_cents\": 12000, \"discount_cents\": 0, \"net_payable_cents\": 12000, \"fee_ratio\": 0.0125, \"status\": \"settled\"}"
+  ],
+  "coupon": [
+   "POST /api/v1/checkout             -> 500  [flt-92e75bfe]",
+   "     {\"error\": \"ZeroDivisionError\", \"detail\": \"division by zero in calculate_fee_ratio() at checkout_logic.py:19\", \"endpoint\": \"/api/v1/checkout\"}"
+  ],
+  "orders": [
+   "GET  /api/v1/orders/101           -> 200  [flt-e91f666f]",
+   "     {\"order_id\": \"ord_101\", \"customer_tier\": \"enterprise\", \"total_cents\": 12500, \"currency\": \"USD\", \"status\": \"confirmed\"}",
+   "GET  /api/v1/orders/102           -> 200  [flt-611b7ca7]",
+   "     {\"order_id\": \"ord_102\", \"customer_tier\": \"pro\", \"total_cents\": \"twelve-thousand-five-hundred\", \"status\": \"pending_review\"}"
+  ],
+  "webhook": [
+   "POST /api/v1/webhooks/stripe      -> 429",
+   "     {\"error\": \"faultline_chaos_injected\", \"rule_id\": \"chaos-688910\", \"fault_type\": \"status_code\", \"status_code\": 429}"
+  ]
+ },
+ "marks": {
+  "t0": 1794162530.0807428,
+  "marks": {
+   "ready": 2.61,
+   "a.typed": 10.667,
+   "proxy.called": 25.69,
+   "approval.1": 35.708,
+   "proxy.started": 81.071,
+   "run:traffic.baseline": 84.076,
+   "run:traffic.coupon": 90.089,
+   "run:traffic.orders": 96.096,
+   "run:studio.click500": 102.101,
+   "run:studio.still.inspector": 106.108,
+   "c.typed": 113.541,
+   "trace.read": 118.432,
+   "patch.applied": 161.398,
+   "replay.called": 168.176,
+   "timeout:replay.done": 468.21,
+   "run:studio.still.fix": 471.219,
+   "run:studio.replay.clicked": 473.228,
+   "run:studio.still.banner": 477.246,
+   "d.typed": 484.391,
+   "chaos.added": 501.193,
+   "run:chaos.hit": 503.194,
+   "approval.2": 547.825,
+   "approval.3": 618.888,
+   "timeout:contract.shown": 803.273,
+   "run:studio.click429": 805.279,
+   "run:studio.still.chaos": 809.294,
+   "exit.typed": 812.813
+  },
+  "epoch": {
+   "ready": 1794162532.691,
+   "a.typed": 1794162540.748,
+   "proxy.called": 1794162555.771,
+   "approval.1": 1794162565.789,
+   "proxy.started": 1794162611.152,
+   "run:traffic.baseline": 1794162614.157,
+   "run:traffic.coupon": 1794162620.17,
+   "run:traffic.orders": 1794162626.177,
+   "run:studio.click500": 1794162632.182,
+   "run:studio.still.inspector": 1794162636.189,
+   "c.typed": 1794162643.622,
+   "trace.read": 1794162648.513,
+   "patch.applied": 1794162691.479,
+   "replay.called": 1794162698.257,
+   "timeout:replay.done": 1794162998.291,
+   "run:studio.still.fix": 1794163001.3,
+   "run:studio.replay.clicked": 1794163003.309,
+   "run:studio.still.banner": 1794163007.327,
+   "d.typed": 1794163014.472,
+   "chaos.added": 1794163031.274,
+   "run:chaos.hit": 1794163033.275,
+   "approval.2": 1794163077.906,
+   "approval.3": 1794163148.969,
+   "timeout:contract.shown": 1794163333.354,
+   "run:studio.click429": 1794163335.36,
+   "run:studio.still.chaos": 1794163339.375,
+   "exit.typed": 1794163342.894
+  }
+ }
+}
