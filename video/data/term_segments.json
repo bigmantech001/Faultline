@@ -1,0 +1,286 @@
+{
+ "cast": "/private/tmp/claude-501/-Users-bigmantech001-Faultline/24ea2fa7-aaf2-4fa6-8efe-c0431050eb42/scratchpad/film/take2/session.cast",
+ "cast_seconds": 813.037,
+ "clip_seconds": 107.3169666666667,
+ "segments": [
+  {
+   "cast_from": 0,
+   "cast_to": 11.5,
+   "speed": 1,
+   "clip_from": 0,
+   "clip_to": 11.5
+  },
+  {
+   "cast_from": 11.5,
+   "cast_to": 25.5,
+   "speed": 6,
+   "clip_from": 11.5,
+   "clip_to": 13.833333333333334
+  },
+  {
+   "cast_from": 25.5,
+   "cast_to": 26,
+   "speed": 1,
+   "clip_from": 13.833333333333334,
+   "clip_to": 14.333333333333334
+  },
+  {
+   "cast_from": 26,
+   "cast_to": 78,
+   "speed": 6,
+   "clip_from": 14.333333333333334,
+   "clip_to": 23
+  },
+  {
+   "cast_from": 78,
+   "cast_to": 81.5,
+   "speed": 1,
+   "clip_from": 23,
+   "clip_to": 26.5
+  },
+  {
+   "cast_from": 81.5,
+   "cast_to": 113,
+   "speed": 4,
+   "clip_from": 26.5,
+   "clip_to": 34.375
+  },
+  {
+   "cast_from": 113,
+   "cast_to": 114.3,
+   "speed": 1,
+   "clip_from": 34.375,
+   "clip_to": 35.675
+  },
+  {
+   "cast_from": 114.3,
+   "cast_to": 118.2,
+   "speed": 6,
+   "clip_from": 35.675,
+   "clip_to": 36.324999999999996
+  },
+  {
+   "cast_from": 118.2,
+   "cast_to": 118.6,
+   "speed": 1,
+   "clip_from": 36.324999999999996,
+   "clip_to": 36.72499999999999
+  },
+  {
+   "cast_from": 118.6,
+   "cast_to": 163,
+   "speed": 6,
+   "clip_from": 36.72499999999999,
+   "clip_to": 44.124999999999986
+  },
+  {
+   "cast_from": 163,
+   "cast_to": 163.4,
+   "speed": 1,
+   "clip_from": 44.124999999999986,
+   "clip_to": 44.52499999999999
+  },
+  {
+   "cast_from": 163.4,
+   "cast_to": 168,
+   "speed": 3,
+   "clip_from": 44.52499999999999,
+   "clip_to": 46.05833333333332
+  },
+  {
+   "cast_from": 168,
+   "cast_to": 168.4,
+   "speed": 1,
+   "clip_from": 46.05833333333332,
+   "clip_to": 46.45833333333333
+  },
+  {
+   "cast_from": 168.4,
+   "cast_to": 200.8,
+   "speed": 4,
+   "clip_from": 46.45833333333333,
+   "clip_to": 54.55833333333333
+  },
+  {
+   "cast_from": 200.8,
+   "cast_to": 210.6,
+   "speed": 1,
+   "clip_from": 54.55833333333333,
+   "clip_to": 64.35833333333332
+  },
+  {
+   "cast_from": 210.6,
+   "cast_to": 479,
+   "speed": 1000,
+   "clip_from": 64.35833333333332,
+   "clip_to": 64.62673333333332
+  },
+  {
+   "cast_from": 479,
+   "cast_to": 485.2,
+   "speed": 1,
+   "clip_from": 64.62673333333332,
+   "clip_to": 70.82673333333331
+  },
+  {
+   "cast_from": 485.2,
+   "cast_to": 500.7,
+   "speed": 6,
+   "clip_from": 70.82673333333331,
+   "clip_to": 73.41006666666664
+  },
+  {
+   "cast_from": 500.7,
+   "cast_to": 501.1,
+   "speed": 1,
+   "clip_from": 73.41006666666664,
+   "clip_to": 73.81006666666667
+  },
+  {
+   "cast_from": 501.1,
+   "cast_to": 639.6,
+   "speed": 8,
+   "clip_from": 73.81006666666667,
+   "clip_to": 91.12256666666667
+  },
+  {
+   "cast_from": 639.6,
+   "cast_to": 647.6,
+   "speed": 1,
+   "clip_from": 91.12256666666667,
+   "clip_to": 99.12256666666667
+  },
+  {
+   "cast_from": 647.6,
+   "cast_to": 805,
+   "speed": 1000,
+   "clip_from": 99.12256666666667,
+   "clip_to": 99.27996666666667
+  },
+  {
+   "cast_from": 805,
+   "cast_to": 813.037,
+   "speed": 1,
+   "clip_from": 99.27996666666667,
+   "clip_to": 107.3169666666667
+  }
+ ],
+ "marks": {
+  "ready": {
+   "cast": 2.61,
+   "clip": 2.61
+  },
+  "a.typed": {
+   "cast": 10.667,
+   "clip": 10.667
+  },
+  "proxy.called": {
+   "cast": 25.69,
+   "clip": 14.023333333333335
+  },
+  "approval.1": {
+   "cast": 35.7,
+   "clip": 15.950000000000001
+  },
+  "proxy.started": {
+   "cast": 81.071,
+   "clip": 26.070999999999998
+  },
+  "c.typed": {
+   "cast": 113.541,
+   "clip": 34.916
+  },
+  "trace.read": {
+   "cast": 118.432,
+   "clip": 36.556999999999995
+  },
+  "patch.applied": {
+   "cast": 163.2,
+   "clip": 44.324999999999974
+  },
+  "replay.called": {
+   "cast": 168.176,
+   "clip": 46.23433333333331
+  },
+  "d.typed": {
+   "cast": 484.391,
+   "clip": 70.01773333333334
+  },
+  "chaos.added": {
+   "cast": 501.193,
+   "clip": 73.82169166666667
+  },
+  "approval.2": {
+   "cast": 547.8,
+   "clip": 79.64756666666666
+  },
+  "approval.3": {
+   "cast": 618.9,
+   "clip": 88.53506666666667
+  },
+  "exit.typed": {
+   "cast": 812.813,
+   "clip": 107.09296666666665
+  },
+  "proxy.row": {
+   "cast": 25.7,
+   "clip": 14.033333333333333
+  },
+  "replay.done": {
+   "cast": 210.2,
+   "clip": 63.95833333333331
+  },
+  "reply.a": {
+   "cast": 78.4,
+   "clip": 23.400000000000006
+  },
+  "reply.c": {
+   "cast": 201,
+   "clip": 54.75833333333332
+  },
+  "chaos.called": {
+   "cast": 500.9,
+   "clip": 73.61006666666663
+  },
+  "contract.called": {
+   "cast": 540.2,
+   "clip": 78.69756666666667
+  },
+  "reply.d": {
+   "cast": 639.8,
+   "clip": 91.3225666666666
+  },
+  "contract.shown": {
+   "cast": 647.3,
+   "clip": 98.8225666666666
+  },
+  "traffic.baseline": {
+   "cast": 84.076,
+   "clip": 27.144
+  },
+  "traffic.coupon": {
+   "cast": 90.089,
+   "clip": 28.64725
+  },
+  "traffic.orders": {
+   "cast": 96.096,
+   "clip": 30.149
+  },
+  "studio.click500": {
+   "cast": 102.101,
+   "clip": 31.65025
+  },
+  "studio.replay.clicked": {
+   "cast": 473.228,
+   "clip": 64.62096133333333
+  },
+  "chaos.hit": {
+   "cast": 503.194,
+   "clip": 74.07181666666668
+  },
+  "studio.click429": {
+   "cast": 805.279,
+   "clip": 99.55896666666666
+  }
+ }
+}
