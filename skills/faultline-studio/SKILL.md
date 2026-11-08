@@ -14,18 +14,21 @@ Use the **Faultline** toolset whenever you are debugging local APIs, webhooks, m
    - Sensitive headers (`Authorization`, `Cookie`, `X-Api-Key`) and secret tokens in JSON payloads are automatically redacted before persistence.
    - The result's `proxy_url` is what the user's client, frontend, or webhook sender must call instead of the service. Tell the user to switch their base URL to it; traffic that bypasses the proxy is not recorded.
    - Stop proxies you started when the debugging session ends: `faultline_proxy(action="stop")`.
+   - To start from an empty store call `faultline_proxy(action="clear")`: it deletes recorded traces, learned contracts and replay receipts. Chaos rules and running proxies stay.
 
 2. **Inspect Captured Traces & Failures (`faultline_traces`)**
-   - Call `faultline_traces(status_filter="5xx")` or `faultline_traces(only_drifts=True)` to inspect failing requests or schema drift violations without asking the user to copy-paste `curl` payloads.
+   - Call `faultline_traces(status_filter="5xx")` for failing requests, `faultline_traces(status_filter="drifted")` (the same as `only_drifts=True`) for schema drift violations, and `faultline_traces(status_filter="replayed")` for the traces replays produced, without asking the user to copy-paste `curl` payloads.
+   - `faultline_traces(trace_id="flt-...")` returns one trace in full: redacted headers, request and response bodies, drift findings, `replayed_from`.
    - Embed `::faultline-trace{id="flt-..."}` in your response so the user sees an interactive request/response and replay card in Hermes Desktop.
    - The user can follow along live in Hermes Desktop (sidebar → **Faultline**) or in the web dashboard tab (`hermes dashboard` → `/faultline`); point them there instead of pasting long trace dumps into chat.
 
 3. **Audit Learned OpenAPI 3.1 Contracts (`faultline_contract`)**
    - Faultline automatically learns baseline JSON schemas and latencies from healthy `2xx` responses and flags `type_mismatch`, `missing_required_field`, `server_error_5xx`, and `latency_regression` drifts.
-   - Call `faultline_contract(action="openapi")` to export a complete OpenAPI 3.1 specification.
+   - Call `faultline_contract(action="summary")` for the learned contracts and recent drifts, narrowed with `endpoint="GET /api/v1/orders/{id}"` when needed, and `faultline_contract(action="openapi")` to export a complete OpenAPI 3.1 specification.
 
 4. **Test Resilience with Chaos Rules (`faultline_chaos`)**
-   - Inject synthetic `429`, `502`, `503`, artificial latency (`latency_ms`), or truncated JSON (`corrupt_json`) on specific routes using `faultline_chaos(action="add", path_pattern="/api/v1/webhooks", fault_type="status_code", status_code=429)`.
+   - Inject synthetic `429`, `502`, `503`, artificial latency, or truncated JSON on specific routes using `faultline_chaos(action="add", path_pattern="/api/v1/webhooks", fault_type="status_code", status_code=429)`.
+   - `fault_type="latency"` with `latency_ms=800` delays the request and then forwards it to the real service; `fault_type="latency_and_status"` delays and then answers with `status_code`; `fault_type="corrupt_json"` answers with a truncated JSON body. `path_pattern` is a substring of the path or a regular expression.
 
 5. **Deterministically Verify Fixes (`faultline_replay`)**
    - After patching the backend code, call `faultline_replay(trace_id="flt-...")` to re-fire the exact captured request against the live service and prove `500 -> 200 OK` with latency and schema diffing.
