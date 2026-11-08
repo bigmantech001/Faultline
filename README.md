@@ -6,7 +6,7 @@ When you debug an HTTP service with Hermes, the agent usually can't see the traf
 
 1. **Record.** Hermes starts a reverse proxy on `127.0.0.1` in front of your service. Every request and response is captured to a local SQLite database. Auth headers (`Authorization`, `Cookie`, `X-Api-Key`, …) and secret JSON fields (`password`, `api_key`, `access_token`, …) are redacted *before* anything is written.
 2. **Learn the contract.** The first healthy `2xx` response for each route (IDs normalised to `{id}`) becomes the baseline schema. Later responses are checked against it and flagged as `type_mismatch`, `missing_required_field`, `server_error_5xx` or `latency_regression`. The learned contract exports as an OpenAPI 3.1 document.
-3. **Break it on purpose.** Chaos rules inject `429`/`5xx` status codes, latency, or truncated JSON on matching routes, so you can see how clients and webhooks behave under failure.
+3. **Break it on purpose.** Chaos rules inject `429`/`5xx` status codes, delay a request before forwarding it, or return truncated JSON on matching routes, so you can see how clients and webhooks behave under failure.
 4. **Prove the fix.** After Hermes patches the code, `faultline_replay` re-sends the exact captured failing request and reports the transition (`500 -> 200`), the latency delta, and any drift that remains.
 
 That loop needs live state, a real proxy and a database, so it can't be done with a prompt or skill alone.
@@ -71,7 +71,7 @@ Ask Hermes something like:
 
 > My checkout service on :8000 is returning 500s for some coupons. Put Faultline in front of it and find out why.
 
-Hermes calls `faultline_proxy(action="start", target_url="http://127.0.0.1:8000")` and gets back a `proxy_url` (e.g. `http://127.0.0.1:53817`). Point your client or frontend at that URL. Hermes then inspects failures with `faultline_traces(status_filter="5xx")`, fixes the code, and verifies with `faultline_replay(trace_id="flt-…")`.
+Hermes calls `faultline_proxy(action="start", target_url="http://127.0.0.1:8000")` and gets back a `proxy_url` (e.g. `http://127.0.0.1:53817`). Point your client or frontend at that URL. Hermes then inspects failures with `faultline_traces(status_filter="5xx")` and schema drift with `faultline_traces(status_filter="drifted")`, fixes the code, and verifies with `faultline_replay(trace_id="flt-…")`.
 
 ### Self-contained demo (no service needed)
 
@@ -94,7 +94,7 @@ The standalone script records into a temporary directory. `/faultline simulate` 
 python3 -m unittest discover -s tests -v
 ```
 
-The suite runs from any checkout folder name and needs only the standard library. It covers registration, the middleware contract, redaction, drift detection, config settings, header/redirect passthrough, `HEAD`, 40 concurrent proxied requests, and the full simulate → replay loop.
+The suite runs from any checkout folder name and needs only the standard library. It covers registration, the middleware contract, the tool schema to handler contract (every declared parameter and enum value is accepted, values outside the schema get a precise error, and the parameter names in this README and the skill match the schemas), redaction, drift detection, config settings, header/redirect passthrough, `HEAD`, 40 concurrent proxied requests, trace filters, clearing the recorder, a pure latency chaos rule, and the full simulate → replay loop.
 
 ---
 
@@ -104,7 +104,7 @@ What you should know before installing:
 
 - **Network.** The proxy listens on `127.0.0.1` only. It forwards to the `target_url` you or the agent provide. That is normally a local service, but it can be any `http(s)` host, and traffic then leaves your machine as it would without the proxy. Faultline makes no other network calls: no telemetry, no update checks, no third-party services.
 - **Replay re-sends real requests.** `faultline_replay` repeats the captured method, path and body against the target. Replaying a `POST` (checkout, webhook, payment) **runs it again**, with whatever side effects that has. Redacted auth headers are *not* replayed. Pass fresh ones with `override_headers` when the endpoint needs auth.
-- **Data on disk.** Captured traffic (redacted headers, bodies up to `max_body_chars`), learned contracts, chaos rules and replay results are stored in SQLite in your Hermes home at `$HERMES_HOME/plugin-data/faultline/faultline.db` (plus its `-wal`/`-shm` sidecar files). Redaction is pattern-based. Treat the database as sensitive if you proxy production-like data, and delete those files to clear history.
+- **Data on disk.** Captured traffic (redacted headers, bodies up to `max_body_chars`), learned contracts, chaos rules and replay results are stored in SQLite in your Hermes home at `$HERMES_HOME/plugin-data/faultline/faultline.db` (plus its `-wal`/`-shm` sidecar files). Redaction is pattern-based. Treat the database as sensitive if you proxy production-like data. `faultline_proxy(action="clear")` deletes the recorded traces, contracts and replays (chaos rules stay); deleting those files clears everything.
 - **Background threads.** Each running proxy is a daemon HTTP server thread inside the Hermes process. Stop it with `faultline_proxy(action="stop")`. Proxies also end when Hermes exits.
 - **Chaos rules persist** in the database until removed (`faultline_chaos(action="clear")`) and apply to every proxy.
 - **No credentials, no shell, no approval bypass.** Faultline reads no `.env` or credential files, spawns no processes, and has no Python dependencies beyond Hermes and the standard library.
