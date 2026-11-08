@@ -78,6 +78,12 @@ def redact_sensitive_text(text: str) -> str:
 
 PLUGIN_NAME = "faultline"
 LOOPBACK_HOST = "127.0.0.1"
+# Fault types a chaos rule can carry; the proxy handler and the faultline_chaos schema list the same four.
+CHAOS_FAULT_TYPES = ("status_code", "latency", "corrupt_json", "latency_and_status")
+# A chaos delay never holds a request thread longer than this.
+CHAOS_MAX_LATENCY_MS = 3000
+# Scenarios run_live_simulation implements; the faultline_simulate schema lists the same set.
+SUPPORTED_SCENARIOS = ("checkout_pipeline",)
 SENSITIVE_HEADERS = {
     "authorization",
     "proxy-authorization",
@@ -669,18 +675,27 @@ def query_traces(
     status_filter: Optional[str] = None,
     path_contains: Optional[str] = None,
     only_drifts: bool = False,
+    replayed_only: bool = False,
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
+    """List traces, newest first. ``status_filter`` takes a status class ('5xx', '4xx', '2xx',
+    'errors'), an exact status ('404'), 'drifted' (same as ``only_drifts``) or 'replayed' (same as
+    ``replayed_only``: traces faultline_replay produced, whose ``replayed_from`` is set)."""
     conn = get_db(data_dir)
     clauses: List[str] = []
     params: List[Any] = []
 
-    if method:
+    method_up = (method or "").strip().upper()
+    if method_up and method_up not in ("*", "ANY"):
         clauses.append("method = ?")
-        params.append(method.upper())
+        params.append(method_up)
 
-    if status_filter and status_filter != "all":
-        sf = status_filter.strip().lower()
+    sf = (status_filter or "all").strip().lower()
+    if sf == "drifted":
+        only_drifts = True
+    elif sf == "replayed":
+        replayed_only = True
+    elif sf and sf != "all":
         if sf == "5xx":
             clauses.append("response_status >= 500")
         elif sf == "4xx":
@@ -699,6 +714,9 @@ def query_traces(
 
     if only_drifts:
         clauses.append("drift_json != '[]'")
+
+    if replayed_only:
+        clauses.append("replayed_from != ''")
 
     where_sql = ("WHERE " + " AND ".join(clauses)) if clauses else ""
     sql = f"SELECT * FROM traces {where_sql} ORDER BY created_at DESC LIMIT ?"
@@ -744,6 +762,11 @@ def add_chaos_rule(
     response_body: str = "",
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
+    if fault_type not in CHAOS_FAULT_TYPES:
+        return {
+            "ok": False,
+            "error": f"Unknown fault_type {fault_type!r}. Use one of: {', '.join(CHAOS_FAULT_TYPES)}.",
+        }
     conn = get_db(data_dir)
     rule_id = f"chaos-{uuid.uuid4().hex[:6]}"
     method_up = (method or "ANY").upper()
@@ -833,6 +856,21 @@ def clear_chaos_rules(data_dir: Optional[Path] = None) -> Dict[str, Any]:
     cur = conn.execute("DELETE FROM chaos_rules")
     conn.commit()
     return {"ok": True, "cleared_count": cur.rowcount}
+
+
+@_locked
+def clear_recorder(data_dir: Optional[Path] = None) -> Dict[str, Any]:
+    """Delete every recorded trace, learned contract and replay receipt and return the counts.
+    Chaos rules and the active-proxy registry are kept: running proxies keep recording into the
+    now empty store and rules keep firing."""
+    conn = get_db(data_dir)
+    cleared: Dict[str, int] = {}
+    for table in ("traces", "contracts", "replays"):
+        cleared[table] = int(conn.execute(f"SELECT COUNT(*) FROM {table}").fetchone()[0] or 0)
+        conn.execute(f"DELETE FROM {table}")
+    conn.commit()
+    broadcast_plugin_event(PLUGIN_NAME, "recorder.cleared", dict(cleared))
+    return {"ok": True, "cleared": cleared, "kept": ["chaos_rules", "active_proxies"]}
 
 
 @_locked
@@ -1163,8 +1201,10 @@ class ManagedProxyInstance:
                 if chaos:
                     delay_ms = int(chaos.get("latency_ms") or 0)
                     if delay_ms > 0:
-                        time.sleep(min(delay_ms, 3000) / 1000.0)
+                        time.sleep(min(delay_ms, CHAOS_MAX_LATENCY_MS) / 1000.0)
                     fault_type = chaos.get("fault_type", "status_code")
+                    # A pure "latency" rule only delays: it falls through to the normal upstream
+                    # forward below, and the trace records the rule id it ran under.
                     if fault_type in ("status_code", "latency_and_status", "corrupt_json"):
                         status_code = int(chaos.get("status_code") or 503)
                         if fault_type == "corrupt_json":
@@ -1256,6 +1296,8 @@ class ManagedProxyInstance:
                     if h_name.lower() not in _HOP_BY_HOP_HEADERS:
                         self.send_header(h_name, h_value)
                 self.send_header("X-Faultline-Trace-Id", trace["trace_id"])
+                if chaos:
+                    self.send_header("X-Faultline-Chaos", chaos["rule_id"])
                 self.send_header("Content-Length", str(len(resp_body_bytes)))
                 self.end_headers()
                 if self.command != "HEAD":
@@ -1459,6 +1501,12 @@ def run_live_simulation(
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
     """Spin up an ephemeral local microservice + Faultline proxy, capture real 200/500/drift/chaos traces, hotfix the bug, and deterministically replay the 500 trace to verify `500 -> 200 OK`."""
+    scenario = str(scenario or "checkout_pipeline")
+    if scenario not in SUPPORTED_SCENARIOS:
+        return {
+            "ok": False,
+            "error": f"Unknown scenario {scenario!r}. Use one of: {', '.join(SUPPORTED_SCENARIOS)}.",
+        }
     state = {"patched": False}
 
     class DemoUpstreamHandler(http.server.BaseHTTPRequestHandler):
