@@ -35,7 +35,7 @@ export const Chaos: React.FC = () => {
 
       {/* The agent's own check of the rule: the webhook gets 429, every other route is untouched, GET is not caught. */}
       <Footage name="term" tag="hermes chat" left={96} top={160} width={992} height={620}
-        hold={markOf("term", "chaos.verified", 2985)}
+        hold={markOf("term", "chaos.verified", 2972)}
         cams={[
           { f: 0, z: 1.1 },
           { f: tInject - 4, z: 1.1 },

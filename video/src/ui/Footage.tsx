@@ -79,7 +79,8 @@ export interface Cam { f: number; rect?: Rect; z?: number; dx?: number; dy?: num
 function camAt(f: number, cams: Cam[], ph: number) {
   const pts = cams.map((c) => ({
     f: c.f, z: c.z ?? (c.rect ? 1.6 : 1),
-    cx: (c.rect ? c.rect.x + c.rect.w / 2 : PAGE.w / 2) + (c.dx ?? 0),
+    // A box wider than the view keeps its left edge in frame (terminal lines are left-aligned).
+    cx: (c.rect ? (c.rect.w > PAGE.w / (c.z ?? 1.6) - 40 ? c.rect.x - 12 + PAGE.w / (2 * (c.z ?? 1.6)) : c.rect.x + c.rect.w / 2) : PAGE.w / 2) + (c.dx ?? 0),
     cy: (c.rect ? c.rect.y + c.rect.h / 2 : ph / 2) + (c.dy ?? 0),
   }));
   if (!pts.length) return { z: 1, cx: PAGE.w / 2, cy: ph / 2 };
@@ -148,6 +149,9 @@ export const Footage: React.FC<{
         {ok ? (
           <div style={{ position: "absolute", left: 0, top: 0, width: PAGE.w, height: PH, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k * s})` }}>
             {player}
+            {(PATCHES[name] ?? []).map((p, i) => (
+              <div key={`p${i}`} style={{ position: "absolute", left: p.x, top: p.y, width: p.w, height: p.h, background: p.bg, color: p.color, fontFamily: p.font, fontSize: p.size, lineHeight: `${p.h}px`, paddingLeft: p.pad, whiteSpace: "nowrap" }}>{p.text}</div>
+            ))}
             {marks.map((m, i) => <Highlight key={i} m={m} f={f} />)}
           </div>
         ) : (
@@ -156,6 +160,15 @@ export const Footage: React.FC<{
       </div>
     </div>
   );
+};
+
+/**
+ * Fixed overlays on a clip, in page CSS px. The Studio was recorded under the macOS account name, which the
+ * Desktop status bar prints as the workspace folder; the entry is submitted as bigmantech001, so that one
+ * label is set over in the bar's own colours.
+ */
+const PATCHES: Record<string, { x: number; y: number; w: number; h: number; bg: string; color: string; font: string; size: number; pad: number; text: string }[]> = {
+  studio: [{ x: 161, y: 880, w: 110, h: 20, bg: "#01050a", color: "#8f9398", font: "-apple-system, BlinkMacSystemFont, 'SF Pro Text', Inter, sans-serif", size: 12.5, pad: 3, text: "bigmantech001" }],
 };
 
 const Highlight: React.FC<{ m: Mark; f: number }> = ({ m, f }) => {
