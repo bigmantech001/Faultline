@@ -70,6 +70,9 @@ export const speedAt = (name: string, cf: number): number | undefined => {
 /** The page the footage was recorded at, in CSS pixels (3200x1800 at device scale 2). */
 export const PAGE = { w: 1600, h: 900 };
 
+/** A highlight drawn on the footage itself, in page CSS px, wiping in at local frame `at` (and out at `out`). */
+export interface Mark { rect: Rect; at: number; out?: number; color?: string }
+
 /** A camera keyframe: at local frame `f`, centre on `rect` (page CSS px) at `z` times the fit-to-width scale. */
 export interface Cam { f: number; rect?: Rect; z?: number; dx?: number; dy?: number }
 
@@ -101,7 +104,12 @@ const fmtSpeed = (s: number) => (Math.abs(s - Math.round(s)) < 0.05 ? String(Mat
 export const Footage: React.FC<{
   name: string; left: number; top: number; width: number; height: number;
   startFrom?: number; cams?: Cam[]; enter?: number; tag?: string; tone?: Tone; stopAt?: number; style?: React.CSSProperties; label?: boolean;
-}> = ({ name, left, top, width, height, startFrom = 0, cams = [], enter = 0, tag, tone = "dark", stopAt, style, label = true }) => {
+  /** Play the clip at this rate (the label then says "waits sped up Nx"). */
+  rate?: number;
+  /** Hold this clip frame for the whole sequence (the label says so). */
+  hold?: number;
+  marks?: Mark[];
+}> = ({ name, left, top, width, height, startFrom = 0, cams = [], enter = 0, tag, tone = "dark", stopAt, style, label = true, rate = 1, hold, marks = [] }) => {
   const f = useCurrentFrame();
   const c = clip(name);
   const ok = hasClip(name);
@@ -117,11 +125,12 @@ export const Footage: React.FC<{
   const ty = Math.min(0, Math.max(vh - PH * k * s, vh / 2 - cam.cy * k * s));
   const inP = interpolate(f, [enter, enter + 16], [0, 1], { ...clamp, easing: expo });
   const last = c ? Math.min(c.durationFrames - 2, stopAt ?? Infinity) : 0;
-  const pos = f + startFrom;
-  const video = ok && c ? <OffthreadVideo src={staticFile(c.file)} startFrom={startFrom} muted style={{ width: PAGE.w, height: PH }} /> : null;
-  const player = pos >= last ? <Freeze frame={Math.max(0, last - startFrom)}>{video}</Freeze> : video;
-  const speed = ok ? speedAt(name, pos) : undefined;
-  const honest = !ok ? "awaiting footage" : speed == null ? "real session" : speed > 1.02 ? `real session, waits sped up ${fmtSpeed(speed)}x` : "real session, real time";
+  const pos = hold ?? startFrom + Math.floor(f * rate);
+  const video = ok && c ? <OffthreadVideo src={staticFile(c.file)} startFrom={hold ?? startFrom} playbackRate={hold == null ? rate : 1} muted style={{ width: PAGE.w, height: PH }} /> : null;
+  const player = hold != null ? <Freeze frame={0}>{video}</Freeze> : pos >= last ? <Freeze frame={Math.max(0, Math.floor((last - startFrom) / rate))}>{video}</Freeze> : video;
+  const base = ok ? speedAt(name, pos) : undefined;
+  const speed = base == null ? (rate > 1.02 ? rate : undefined) : base * rate;
+  const honest = !ok ? "awaiting footage" : hold != null ? "real session, frame held" : speed == null ? "real session" : speed > 1.02 ? `real session, waits sped up ${fmtSpeed(speed)}x` : "real session, real time";
   const dark = tone === "dark";
   return (
     <div style={{
@@ -139,12 +148,24 @@ export const Footage: React.FC<{
         {ok ? (
           <div style={{ position: "absolute", left: 0, top: 0, width: PAGE.w, height: PH, transformOrigin: "0 0", transform: `translate(${tx}px, ${ty}px) scale(${k * s})` }}>
             {player}
+            {marks.map((m, i) => <Highlight key={i} m={m} f={f} />)}
           </div>
         ) : (
           <Placeholder name={name} tone={tone} />
         )}
       </div>
     </div>
+  );
+};
+
+const Highlight: React.FC<{ m: Mark; f: number }> = ({ m, f }) => {
+  const p = interpolate(f, [m.at, m.at + 10], [0, 1], { ...clamp, easing: expo });
+  const o = m.out == null ? 1 : interpolate(f, [m.out, m.out + 8], [1, 0], clamp);
+  if (p <= 0 || o <= 0) return null;
+  const col = m.color ?? C.orange;
+  const { x, y, w, h } = m.rect;
+  return (
+    <div style={{ position: "absolute", left: x - 6, top: y - 4, width: (w + 12) * p, height: h + 8, opacity: o, borderRadius: 6, border: `3px solid ${col}`, background: `${col}1f`, boxShadow: `0 0 24px ${col}55` }} />
   );
 };
 
