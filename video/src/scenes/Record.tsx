@@ -2,11 +2,15 @@ import React from "react";
 import { interpolate } from "remotion";
 import { C } from "../theme";
 import { clamp } from "../ui/motion";
-import { Footage, syncTo } from "../ui/Footage";
+import { Footage, Rect, markOf, syncTo } from "../ui/Footage";
 import { Words } from "../ui/Words";
 import { R } from "../rects";
 import { S, proxyPort } from "../data";
 import { Card, Fill, Head, In, Kicker, Label, Mono, Pending, useCue } from "./common";
+
+/** The Captured Traces / 5xx / Drifts tiles and the top of the waterfall, in the Studio's page CSS px. */
+const LIVE: Rect = { x: 270, y: 140, w: 1000, h: 560 };
+const TILES: Rect = { x: 284, y: 152, w: 966, h: 88 };
 
 /** Split screen: the real hermes chat (left) starting the proxy, the real Studio (right) filling with traces. */
 export const Record: React.FC = () => {
@@ -36,13 +40,15 @@ export const Record: React.FC = () => {
           { f: tEvery - 10, rect: R("term.proxy_url"), z: 1.7 },
           { f: tEvery + 10, z: 1.1 },
         ]} />
+      {/* The Studio fills live while the storefront traffic lands: 7 -> 13 captured traces, the second 500 and the drifts, at 4x. */}
       <Footage name="studio" tag="hermes desktop · faultline studio" left={1112} top={160} width={712} height={620} enter={6}
-        startFrom={syncTo("studio", "first_traces", tEvery + 4)}
+        startFrom={markOf("studio", "traffic.baseline", 2525) - (tEvery - 28) * 4} rate={4}
         cams={[
           { f: 0, z: 1 },
-          { f: tEvery - 6, z: 1 },
-          { f: tEvery + 14, rect: R("studio.waterfall"), z: 1.5 },
-        ]} />
+          { f: tEvery - 34, z: 1 },
+          { f: tEvery - 12, rect: LIVE, z: 1.5 },
+        ]}
+        marks={[{ rect: TILES, at: tEvery - 4, out: tSecrets + 10 }]} />
 
       {/* storefront -> proxy -> service */}
       <Card at={rel("service.") - 2} left={96} top={800} width={992} height={140} accent={C.orange}>
@@ -57,7 +63,7 @@ export const Record: React.FC = () => {
           <Mono size={15} color={C.muted}>checkout service</Mono>
         </div>
         {!port ? <Pending compact what="data/session.json · proxy.proxy_url" style={{ marginTop: 10 }} /> : (
-          <div style={{ marginTop: 12 }}><Mono size={15} color={C.muted}>recorded to SQLite in the Hermes home · {S?.totals.total_traces} traces in this session</Mono></div>
+          <div style={{ marginTop: 12 }}><Mono size={15} color={C.muted}>recorded to SQLite in the Hermes home · every row on the right is a real request from this take</Mono></div>
         )}
       </Card>
 
