@@ -76,11 +76,17 @@ export interface Mark { rect: Rect; at: number; out?: number; color?: string }
 /** A camera keyframe: at local frame `f`, centre on `rect` (page CSS px) at `z` times the fit-to-width scale. */
 export interface Cam { f: number; rect?: Rect; z?: number; dx?: number; dy?: number }
 
-function camAt(f: number, cams: Cam[], ph: number) {
+function camAt(f: number, cams: Cam[], ph: number, zMin = 1, left = false) {
   const pts = cams.map((c) => ({
     f: c.f, z: c.z ?? (c.rect ? 1.6 : 1),
-    // A box wider than the view keeps its left edge in frame (terminal lines are left-aligned).
-    cx: (c.rect ? (c.rect.w > PAGE.w / (c.z ?? 1.6) - 40 ? c.rect.x - 12 + PAGE.w / (2 * (c.z ?? 1.6)) : c.rect.x + c.rect.w / 2) : PAGE.w / 2) + (c.dx ?? 0),
+    // Terminal lines are left-aligned: in a terminal shot the left edge of the text always stays in frame.
+    cx: (() => {
+      const ze = Math.max(zMin, c.z ?? (c.rect ? 1.6 : 1));
+      const half = PAGE.w / (2 * ze);
+      const want = c.rect ? c.rect.x + c.rect.w / 2 : PAGE.w / 2;
+      const lo = c.rect ? c.rect.x - 12 : 0;
+      return (left ? Math.min(want, lo + half) : c.rect && c.rect.w > 2 * half - 40 ? lo + half : want) + (c.dx ?? 0);
+    })(),
     cy: (c.rect ? c.rect.y + c.rect.h / 2 : ph / 2) + (c.dy ?? 0),
   }));
   if (!pts.length) return { z: 1, cx: PAGE.w / 2, cy: ph / 2 };
@@ -120,7 +126,7 @@ export const Footage: React.FC<{
   const PH = c && c.width ? Math.round((PAGE.w * c.height) / c.width) : PAGE.h;
   const k = width / PAGE.w;
   const zMin = vh / (k * PH);
-  const cam = camAt(f, cams, PH);
+  const cam = camAt(f, cams, PH, zMin, name === "term");
   const s = Math.max(zMin, cam.z);
   const tx = Math.min(0, Math.max(width - PAGE.w * k * s, width / 2 - cam.cx * k * s));
   const ty = Math.min(0, Math.max(vh - PH * k * s, vh / 2 - cam.cy * k * s));
