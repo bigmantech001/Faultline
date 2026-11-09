@@ -99,13 +99,15 @@ FAULTLINE_TRACES = {
 FAULTLINE_REPLAY = {
     "name": "faultline_replay",
     "description": (
-        "Re-send a recorded request (by trace_id) exactly as captured, against the upstream it was "
-        "recorded from or an override target_url, and diff the result against the original: status "
-        "transition (e.g. '500 -> 200'), latency delta, JSON keys, drifts remaining. Use it after a code "
-        "fix to prove the fix. The replay is a real request with real side effects, so confirm with the "
-        "user before replaying a non-idempotent call (checkout, payment, webhook). Redacted auth headers "
-        "are not re-sent; pass fresh ones in override_headers. The replayed trace is recorded with "
-        "replayed_from set and the result carries its ::faultline-trace directive."
+        "Re-send a recorded request (by trace_id) exactly as captured, to the upstream it was recorded "
+        "from, and diff the result against the original: status transition (e.g. '500 -> 200'), latency "
+        "delta, JSON keys, drifts remaining. Use it after a code fix to prove the fix. The replay is a real "
+        "request with real side effects, so confirm with the user before replaying a non-idempotent call "
+        "(checkout, payment, webhook). Replay reaches loopback and private-network upstreams only when the "
+        "owner has switched on the allow_local_replay plugin setting (off by default); if the result is "
+        "replay_target_refused, ask the user to enable it. Redacted auth headers are not re-sent; pass "
+        "fresh ones in override_headers. The replayed trace is recorded with replayed_from set and the "
+        "result carries its ::faultline-trace directive."
     ),
     "parameters": {
         "type": "object",
@@ -113,13 +115,6 @@ FAULTLINE_REPLAY = {
             "trace_id": {
                 "type": "string",
                 "description": "The recorded trace to replay, e.g. 'flt-92e75bfe'.",
-            },
-            "target_url": {
-                "type": "string",
-                "description": (
-                    "Optional base URL to replay against instead of the trace's own upstream, e.g. "
-                    "'http://127.0.0.1:8081' for a patched build on another port."
-                ),
             },
             "override_headers": {
                 "type": "object",

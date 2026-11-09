@@ -156,7 +156,6 @@ def api_replay_trace(payload: Dict[str, Any] = Body(default={})) -> Dict[str, An
         return {"ok": False, "error": "trace_id is required"}
     return proxy_engine.replay_trace(
         trace_id=trace_id,
-        target_url=payload.get("target_url"),
         override_headers=payload.get("override_headers"),
         override_body=payload.get("override_body"),
     )

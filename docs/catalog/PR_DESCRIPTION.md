@@ -28,8 +28,8 @@ Faultline lets Hermes see real HTTP traffic while it debugs a service, instead o
 
 **Disclosures (rule 13)**
 
-- Network: the proxy listens on `127.0.0.1` only and forwards to the user-supplied `target_url`, normally a local service, but any `http(s)` host is accepted. No telemetry and no other outbound calls.
-- Replay re-sends captured requests: replaying a `POST` repeats its side effects. The bundled skill tells the agent to confirm with the user before replaying non-idempotent calls. Redacted auth headers are not replayed.
+- Network: the proxy listens on `127.0.0.1` only and forwards to the user-supplied `target_url`, normally a local service, but any `http(s)` host is accepted except link-local, cloud-metadata and reserved addresses; the URL may not carry a query, fragment or credentials. No telemetry and no other outbound calls.
+- Replay re-sends captured requests to the upstream they were recorded from only; the agent cannot choose another host. The host is resolved and checked right before the request (link-local/metadata refused always, loopback/private refused unless the owner sets `allow_local_replay`, off by default), the connection is pinned to the checked address, redirects are not followed. Replaying a `POST` repeats its side effects. The bundled skill tells the agent to confirm with the user before replaying non-idempotent calls. Redacted auth headers are not replayed.
 - Data: traces (redacted), learned contracts, chaos rules and replay results are stored in SQLite under `$HERMES_HOME/plugin-data/faultline/`.
 - Long-running processes: each proxy is a daemon HTTP server thread in the Hermes process, stopped with `faultline_proxy(action="stop")` or on exit.
 - No credentials read, no shell commands, no subprocesses, no Python dependencies.

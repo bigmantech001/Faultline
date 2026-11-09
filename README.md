@@ -36,6 +36,7 @@ Set under `plugins.entries.faultline.settings` in `config.yaml`, or in the Deskt
 | `latency_spike_threshold_ms` | `400` | Any captured response slower than this is flagged `latency_regression` (in addition to the relative check: >4× and >200 ms over the learned baseline). `0` disables the absolute check. |
 | `auto_redact_headers` | `true` | Mask auth/cookie/API-key headers before persisting. Secret JSON body fields are always redacted. |
 | `max_body_chars` | `16384` | Request/response bodies longer than this are truncated in storage (minimum 256). |
+| `allow_local_replay` | `false` | Let `faultline_replay` re-send captured requests to loopback and private-network upstreams, i.e. your local service under test. Off by default, so replay reaches public hosts only until you switch it on. Link-local and cloud-metadata addresses are refused whatever the setting. `faultline_simulate`'s built-in service is exempt: the plugin starts it itself. |
 
 ---
 
@@ -71,7 +72,7 @@ Ask Hermes something like:
 
 > My checkout service on :8000 is returning 500s for some coupons. Put Faultline in front of it and find out why.
 
-Hermes calls `faultline_proxy(action="start", target_url="http://127.0.0.1:8000")` and gets back a `proxy_url` (e.g. `http://127.0.0.1:53817`). Point your client or frontend at that URL. Hermes then inspects failures with `faultline_traces(status_filter="5xx")` and schema drift with `faultline_traces(status_filter="drifted")`, fixes the code, and verifies with `faultline_replay(trace_id="flt-…")`.
+Hermes calls `faultline_proxy(action="start", target_url="http://127.0.0.1:8000")` and gets back a `proxy_url` (e.g. `http://127.0.0.1:53817`). Point your client or frontend at that URL. Hermes then inspects failures with `faultline_traces(status_filter="5xx")` and schema drift with `faultline_traces(status_filter="drifted")`, fixes the code, and verifies with `faultline_replay(trace_id="flt-…")`. Replaying against a service on `127.0.0.1` needs `allow_local_replay: true` in the plugin settings; it is off by default (see [Settings](#settings)).
 
 ### Self-contained demo (no service needed)
 
@@ -94,7 +95,7 @@ The standalone script records into a temporary directory. `/faultline simulate` 
 python3 -m unittest discover -s tests -v
 ```
 
-The suite runs from any checkout folder name and needs only the standard library. It covers registration, the middleware contract, the tool schema to handler contract (every declared parameter and enum value is accepted, values outside the schema get a precise error, and the parameter names in this README and the skill match the schemas), redaction, drift detection, config settings, header/redirect passthrough, `HEAD`, 40 concurrent proxied requests, trace filters, clearing the recorder, a pure latency chaos rule, and the full simulate → replay loop.
+The suite runs from any checkout folder name and needs only the standard library. It covers registration, the middleware contract, the tool schema to handler contract (every declared parameter and enum value is accepted, values outside the schema get a precise error, and the parameter names in this README and the skill match the schemas), redaction, drift detection, config settings, header/redirect passthrough, `HEAD`, 40 concurrent proxied requests, trace filters, clearing the recorder, a pure latency chaos rule, the replay target policy (local upstreams refused until the owner allows them, metadata addresses refused always, nothing sent or recorded when refused), target URL hardening, and the full simulate → replay loop.
 
 ---
 
@@ -102,8 +103,8 @@ The suite runs from any checkout folder name and needs only the standard library
 
 What you should know before installing:
 
-- **Network.** The proxy listens on `127.0.0.1` only. It forwards to the `target_url` you or the agent provide. That is normally a local service, but it can be any `http(s)` host, and traffic then leaves your machine as it would without the proxy. Faultline makes no other network calls: no telemetry, no update checks, no third-party services.
-- **Replay re-sends real requests.** `faultline_replay` repeats the captured method, path and body against the target. Replaying a `POST` (checkout, webhook, payment) **runs it again**, with whatever side effects that has. Redacted auth headers are *not* replayed. Pass fresh ones with `override_headers` when the endpoint needs auth.
+- **Network.** The proxy listens on `127.0.0.1` only. It forwards to the `target_url` you or the agent provide. That is normally a local service, but it can be any `http(s)` host, and traffic then leaves your machine as it would without the proxy. A target URL may not carry a query string, fragment or credentials, and link-local, cloud-metadata (`169.254.169.254`, `metadata.google.internal`, …) and reserved addresses are refused as targets. Faultline makes no other network calls: no telemetry, no update checks, no third-party services.
+- **Replay re-sends real requests.** `faultline_replay` repeats the captured method, path and body against the upstream the trace was recorded from; the agent cannot point it at another host. Replaying a `POST` (checkout, webhook, payment) **runs it again**, with whatever side effects that has. By default replay refuses loopback and private-network upstreams; set `allow_local_replay: true` to replay against your local service. Link-local and cloud-metadata addresses are always refused, the host is resolved and checked immediately before the request, the connection goes to the checked address, and redirects are not followed. Redacted auth headers are *not* replayed. Pass fresh ones with `override_headers` when the endpoint needs auth.
 - **Data on disk.** Captured traffic (redacted headers, bodies up to `max_body_chars`), learned contracts, chaos rules and replay results are stored in SQLite in your Hermes home at `$HERMES_HOME/plugin-data/faultline/faultline.db` (plus its `-wal`/`-shm` sidecar files). Redaction is pattern-based. Treat the database as sensitive if you proxy production-like data. `faultline_proxy(action="clear")` deletes the recorded traces, contracts and replays (chaos rules stay); deleting those files clears everything.
 - **Background threads.** Each running proxy is a daemon HTTP server thread inside the Hermes process. Stop it with `faultline_proxy(action="stop")`. Proxies also end when Hermes exits.
 - **Chaos rules persist** in the database until removed (`faultline_chaos(action="clear")`) and apply to every proxy.

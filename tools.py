@@ -142,7 +142,6 @@ def handle_faultline_replay(args: Dict[str, Any], **kwargs: Any) -> str:
 
     result = proxy_engine.replay_trace(
         trace_id=trace_id,
-        target_url=_text(args.get("target_url")) or None,
         override_headers=override_headers,
         override_body=override_body,
     )

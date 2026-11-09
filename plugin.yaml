@@ -1,5 +1,5 @@
 name: faultline
-version: "0.1.0"
+version: "0.1.1"
 description: "Local API flight recorder, OpenAPI contract drift verifier, and deterministic chaos replay studio for Hermes."
 author: "bigmantech001"
 license: MIT
@@ -32,3 +32,8 @@ config_schema:
     default: 16384
     label: "Max Stored Payload Size (chars)"
     description: "Maximum request/response body characters stored per trace in SQLite."
+  allow_local_replay:
+    type: bool
+    default: false
+    label: "Allow Replay Against Local Services"
+    description: "Let faultline_replay re-send captured requests to loopback and private-network upstreams (your local service under test). Off by default: replay then reaches public hosts only. Link-local and cloud-metadata addresses are always refused."

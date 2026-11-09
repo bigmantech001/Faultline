@@ -32,6 +32,7 @@ Use the **Faultline** toolset whenever you are debugging local APIs, webhooks, m
 
 5. **Deterministically Verify Fixes (`faultline_replay`)**
    - After patching the backend code, call `faultline_replay(trace_id="flt-...")` to re-fire the exact captured request against the live service and prove `500 -> 200 OK` with latency and schema diffing.
+   - Replay always goes to the upstream the trace was recorded from; there is no target URL to pass. If the result is `replay_target_refused`, the owner has not enabled replay against local services: ask the user to set `allow_local_replay: true` under `plugins.entries.faultline.settings` in `config.yaml` (or switch it on in the Desktop Plugins tab) and restart Hermes. Do not try to reach the service another way.
    - Replay really re-sends the request. Before replaying a non-idempotent call (`POST` checkout, payment, webhook, email), confirm with the user that running it again is safe.
    - Redacted auth headers are not replayed. If the endpoint needs auth, pass fresh credentials the user provides via `override_headers={"Authorization": "Bearer ..."}`. Never invent them.
    - A `latency_regression` or remaining drift on the replay trace means the fix is incomplete, even if the status is `200`.

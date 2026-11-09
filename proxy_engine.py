@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import datetime as _dt
+import http.client
 import http.server
+import ipaddress
 import json
 import os
 import random
@@ -11,6 +13,7 @@ import re
 import socket
 import socketserver
 import sqlite3
+import ssl
 import threading
 import time
 import urllib.error
@@ -121,6 +124,8 @@ DEFAULT_SETTINGS: Dict[str, Any] = {
     "latency_spike_threshold_ms": 400,
     "auto_redact_headers": True,
     "max_body_chars": 16384,
+    # Replay may reach loopback/private upstreams only when the owner switches this on.
+    "allow_local_replay": False,
 }
 _SETTINGS_PROVIDER: Optional[Callable[[str, Any], Any]] = None
 
@@ -1035,34 +1040,198 @@ def _insert_replay(
     conn.commit()
 
 
+class TargetRefused(ValueError):
+    """An upstream the plugin will not send a request to."""
+
+
+# Address ranges no development service lives in: cloud metadata endpoints, link-local, unspecified,
+# multicast and reserved space. Refused for every target, whatever the settings say.
+_ALWAYS_REFUSED_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in (
+        "0.0.0.0/8",  # "this" network, incl. 0.0.0.0
+        "100.64.0.0/10",  # carrier-grade NAT; Alibaba Cloud metadata at 100.100.100.200
+        "169.254.0.0/16",  # link-local; AWS, GCP, Azure, DigitalOcean metadata at 169.254.169.254
+        "192.0.0.0/24",  # IETF protocol assignments; Oracle Cloud metadata at 192.0.0.192
+        "198.18.0.0/15",  # benchmarking
+        "224.0.0.0/4",  # multicast
+        "240.0.0.0/4",  # reserved, incl. broadcast
+        "::/128",  # unspecified
+        "fd00:ec2::254/128",  # AWS metadata over IPv6
+        "fe80::/10",  # link-local
+        "ff00::/8",  # multicast
+    )
+)
+# Loopback and private space: where the service under test normally runs. The proxy may always
+# forward there; replay reaches it only when the owner sets ``allow_local_replay``.
+_LOCAL_NETWORKS = tuple(
+    ipaddress.ip_network(n)
+    for n in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16", "::1/128", "fc00::/7")
+)
+_METADATA_HOSTNAMES = frozenset({"metadata.google.internal", "metadata", "instance-data"})
+# (address, port) of HTTP servers this process started itself (the simulation's throwaway service).
+# Nothing the model chose is involved, so replay may reach them with ``allow_local_replay`` off.
+_OWNED_UPSTREAMS: set = set()
+
+
+def classify_address(address: str) -> str:
+    """``"refused"``, ``"local"`` or ``"public"`` for one IP address literal."""
+    ip = ipaddress.ip_address(address)
+    if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
+        ip = ip.ipv4_mapped
+    if any(ip in net for net in _ALWAYS_REFUSED_NETWORKS):
+        return "refused"
+    if any(ip in net for net in _LOCAL_NETWORKS):
+        return "local"
+    return "public"
+
+
+def _refuse_never_allowed_host(host: str) -> None:
+    """Refuse cloud-metadata names and literal addresses in a never-allowed range."""
+    name = host.lower().rstrip(".")
+    if name in _METADATA_HOSTNAMES:
+        raise TargetRefused(f"refusing cloud metadata host {host!r}")
+    try:
+        literal = ipaddress.ip_address(name)
+    except ValueError:
+        return  # a hostname: replay resolves and checks it right before connecting
+    if classify_address(str(literal)) == "refused":
+        raise TargetRefused(f"refusing target address {host!r}: link-local, metadata, multicast or reserved range")
+
+
 def _normalize_target_url(target_url: str) -> str:
-    """Validate an upstream base URL: http(s) only, with a host. Raises ValueError otherwise."""
+    """Validate an upstream base URL: http(s), a host, at most a path prefix. Raises ValueError otherwise.
+
+    The recorded path is appended to the base, so a ``?`` or ``#`` in it would turn that path into a
+    query or an inert fragment and send the request wherever the base alone points; both are refused.
+    Userinfo is refused because ``http://trusted@evil`` reads as one host and connects to another.
+    Cloud-metadata names and never-allowed literal addresses are refused for the proxy and for replay.
+    """
     raw = str(target_url or "").strip().rstrip("/")
     parts = urllib.parse.urlsplit(raw)
     if parts.scheme not in ("http", "https") or not parts.netloc:
         raise ValueError(f"target_url must be an http(s) URL with a host, got {target_url!r}")
+    if "?" in raw or "#" in raw:
+        raise ValueError("target_url must not contain a query string or fragment; the recorded path is appended to it")
+    if "@" in parts.netloc:
+        raise ValueError("target_url must not contain credentials (user@host)")
+    try:
+        host, _port = parts.hostname, parts.port
+    except ValueError as exc:
+        raise ValueError(f"target_url has an invalid port: {exc}")
+    if not host:
+        raise ValueError(f"target_url must be an http(s) URL with a host, got {target_url!r}")
+    _refuse_never_allowed_host(host)
     return raw
+
+
+def _resolve_replay_target(base_target: str) -> Tuple[str, str, int, bool]:
+    """Resolve a replay upstream and apply the replay policy; returns ``(host, address, port, tls)``.
+
+    Every address the host resolves to is classified. A never-allowed address refuses the replay
+    outright. A loopback or private address refuses it unless the owner set ``allow_local_replay``
+    or the host:port is a server this process started itself. Raises ``TargetRefused`` in those cases
+    and ``OSError`` when the host does not resolve.
+    """
+    parts = urllib.parse.urlsplit(base_target)
+    host = parts.hostname or ""
+    tls = parts.scheme == "https"
+    port = parts.port or (443 if tls else 80)
+    _refuse_never_allowed_host(host)
+    addresses: List[str] = []
+    for info in socket.getaddrinfo(host, port, type=socket.SOCK_STREAM):
+        if info[4][0] not in addresses:
+            addresses.append(str(info[4][0]))
+    if not addresses:
+        raise OSError(f"{host!r} did not resolve to any address")
+    kinds = {address: classify_address(address) for address in addresses}
+    for address, kind in kinds.items():
+        if kind == "refused":
+            raise TargetRefused(
+                f"replay refused: {host!r} resolves to {address}, a link-local, metadata, multicast or reserved address"
+            )
+    local = [address for address, kind in kinds.items() if kind == "local"]
+    if local and not get_setting("allow_local_replay") and (addresses[0], port) not in _OWNED_UPSTREAMS:
+        raise TargetRefused(
+            f"replay refused: {host!r} is a loopback or private address ({local[0]}) and the owner setting "
+            "allow_local_replay is off. Set plugins.entries.faultline.settings.allow_local_replay: true in "
+            "config.yaml (or switch it on in the Desktop Plugins tab) and restart Hermes to replay against "
+            "local services."
+        )
+    return host, addresses[0], port, tls
+
+
+class _PinnedHTTPSConnection(http.client.HTTPSConnection):
+    """TLS to an address that was already vetted, with SNI and certificate checks for the real hostname."""
+
+    def __init__(self, address: str, port: int, server_hostname: str, timeout: float) -> None:
+        super().__init__(address, port, timeout=timeout, context=ssl.create_default_context())
+        self._server_hostname = server_hostname
+
+    def connect(self) -> None:
+        sock = socket.create_connection((self.host, self.port), self.timeout)
+        self.sock = self._context.wrap_socket(sock, server_hostname=self._server_hostname)
+
+
+def _send_pinned(
+    address: str,
+    port: int,
+    tls: bool,
+    host_header: str,
+    server_hostname: str,
+    method: str,
+    request_path: str,
+    headers: Dict[str, str],
+    body: Optional[bytes],
+    timeout: float,
+) -> Tuple[int, Dict[str, str], str]:
+    """One request to the vetted address. ``http.client`` never follows redirects, so a 3xx comes back as is."""
+    conn: http.client.HTTPConnection
+    if tls:
+        conn = _PinnedHTTPSConnection(address, port, server_hostname, timeout)
+    else:
+        conn = http.client.HTTPConnection(address, port, timeout=timeout)
+    send_headers = {k: v for k, v in headers.items() if k.lower() != "host"}
+    send_headers["Host"] = host_header
+    try:
+        conn.request(method, request_path, body=body, headers=send_headers)
+        resp = conn.getresponse()
+        return int(resp.status), dict(resp.getheaders()), resp.read().decode("utf-8", errors="replace")
+    finally:
+        conn.close()
 
 
 def replay_trace(
     trace_id: str,
-    target_url: Optional[str] = None,
     override_headers: Optional[Dict[str, str]] = None,
     override_body: Optional[str] = None,
     data_dir: Optional[Path] = None,
 ) -> Dict[str, Any]:
-    """Deterministically re-fire a captured HTTP request against an upstream endpoint and diff the response."""
+    """Re-send a captured request to the upstream it was recorded from and diff the response.
+
+    The target is the trace's own ``target_url``; callers cannot choose another host. Before anything
+    is sent the host is resolved and checked by ``_resolve_replay_target``, and the request goes to the
+    checked address, so a DNS answer cannot change between the check and the connection.
+    """
     conn = get_db(data_dir)
     orig = get_trace(trace_id, data_dir=data_dir)
     if not orig.get("ok"):
         return orig
 
+    target: Optional[Tuple[str, str, int, bool]] = None
+    resolve_error: Optional[Exception] = None
     try:
-        base_target = _normalize_target_url(target_url or orig["target_url"])
+        base_target = _normalize_target_url(orig["target_url"])
+        target = _resolve_replay_target(base_target)
+    except TargetRefused as exc:
+        return {"ok": False, "error": str(exc), "error_code": "replay_target_refused", "trace_id": trace_id}
     except ValueError as exc:
-        return {"ok": False, "error": str(exc)}
+        return {"ok": False, "error": str(exc), "trace_id": trace_id}
+    except OSError as exc:
+        resolve_error = exc  # nothing sent; recorded below as an unreachable upstream
+    base_parts = urllib.parse.urlsplit(base_target)
     query_part = f"?{orig['query_string']}" if orig.get("query_string") else ""
-    full_url = f"{base_target}{orig['path']}{query_part}"
+    request_path = f"{base_parts.path}{orig['path']}{query_part}"
 
     headers_to_send: Dict[str, str] = {}
     for k, v in (orig.get("request_headers") or {}).items():
@@ -1075,36 +1244,17 @@ def replay_trace(
     body_str = override_body if override_body is not None else (orig.get("request_body") or "")
     body_bytes = body_str.encode("utf-8") if body_str else None
 
-    req = urllib.request.Request(
-        full_url,
-        data=body_bytes,
-        headers=headers_to_send,
-        method=orig["method"],
-    )
-
     started = time.perf_counter()
-    resp_status = 502
-    resp_headers: Dict[str, str] = {}
-    resp_body = ""
-
     try:
-        with _UPSTREAM_OPENER.open(req, timeout=10.0) as resp:
-            resp_status = int(resp.status)
-            resp_headers = dict(resp.headers.items())
-            resp_body = resp.read().decode("utf-8", errors="replace")
-    except urllib.error.HTTPError as exc:
-        try:
-            resp_status = int(exc.code)
-            resp_headers = dict(exc.headers.items()) if exc.headers else {}
-            try:
-                resp_body = exc.read().decode("utf-8", errors="replace")
-            except Exception:
-                resp_body = str(exc)
-        finally:
-            exc.close()
+        if target is None:
+            raise resolve_error  # type: ignore[misc]
+        host, address, port, tls = target
+        resp_status, resp_headers, resp_body = _send_pinned(
+            address, port, tls, base_parts.netloc, host, orig["method"], request_path, headers_to_send,
+            body_bytes, 10.0,
+        )
     except Exception as exc:
-        resp_status = 502
-        resp_body = json.dumps({"error": "upstream_unreachable", "detail": str(exc)})
+        resp_status, resp_headers, resp_body = 502, {}, json.dumps({"error": "upstream_unreachable", "detail": str(exc)})
 
     latency_ms = round((time.perf_counter() - started) * 1000.0, 2)
 
@@ -1591,6 +1741,8 @@ def run_live_simulation(
     upstream_port = int(upstream_server.server_address[1])
     upstream_thread = threading.Thread(target=upstream_server.serve_forever, daemon=True)
     upstream_thread.start()
+    # This process started that server itself, so replay may reach it without allow_local_replay.
+    _OWNED_UPSTREAMS.add((LOOPBACK_HOST, upstream_port))
 
     proxy_info = start_proxy(
         listen_port=0,
@@ -1646,12 +1798,9 @@ def run_live_simulation(
 
         # 5. Apply hotfix in upstream service and deterministically replay the failed 500 trace
         state["patched"] = True
-        replay_res = replay_trace(
-            trace_id=failed_checkout_trace_id,
-            target_url=f"http://{LOOPBACK_HOST}:{upstream_port}",
-            data_dir=data_dir,
-        )
+        replay_res = replay_trace(trace_id=failed_checkout_trace_id, data_dir=data_dir)
     finally:
+        _OWNED_UPSTREAMS.discard((LOOPBACK_HOST, upstream_port))
         stop_proxy(proxy_port)
         upstream_server.shutdown()
         upstream_server.server_close()

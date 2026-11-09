@@ -15,6 +15,7 @@ import tempfile
 import threading
 import time
 import unittest
+import unittest.mock
 import urllib.error
 import urllib.request
 from concurrent.futures import ThreadPoolExecutor
@@ -214,6 +215,101 @@ class TestFaultlinePlugin(unittest.TestCase):
         res = proxy_engine.start_proxy(listen_port=0, target_url="file:///etc/passwd", data_dir=self.temp_dir)
         self.assertFalse(res["ok"])
         self.assertIn("http(s)", res["error"])
+
+    def test_target_url_hardening_rejects_fragments_queries_credentials_and_metadata(self) -> None:
+        for bad, needle in (
+            ("http://127.0.0.1:8000/#", "fragment"),
+            ("http://127.0.0.1:8000#", "fragment"),
+            ("http://127.0.0.1:8000/?x=1", "query"),
+            ("http://user:pw@127.0.0.1:8000", "credentials"),
+            ("http://169.254.169.254/latest/meta-data", "link-local"),
+            ("http://metadata.google.internal/computeMetadata/v1", "metadata"),
+            ("http://METADATA.google.internal.", "metadata"),
+            ("http://[fe80::1]:8000", "link-local"),
+            ("http://100.100.100.200", "link-local"),
+            ("http://192.0.0.192", "link-local"),
+            ("http://[::ffff:169.254.169.254]", "link-local"),
+            ("http://0.0.0.0:8000", "link-local"),
+        ):
+            with self.subTest(url=bad):
+                res = proxy_engine.start_proxy(listen_port=0, target_url=bad, data_dir=self.temp_dir)
+                self.assertFalse(res["ok"])
+                self.assertIn(needle, res["error"])
+        for good in ("http://127.0.0.1:9", "http://localhost:9/", "http://10.0.0.5:9/api/v2", "https://api.example.com", "http://[::1]:9"):
+            with self.subTest(url=good):
+                self.assertEqual(proxy_engine._normalize_target_url(good), good.rstrip("/"))
+
+    def test_replay_refuses_local_upstream_until_owner_allows_it(self) -> None:
+        hits: list = []
+
+        class Upstream(http.server.BaseHTTPRequestHandler):
+            def do_GET(self) -> None:
+                hits.append((self.path, self.headers.get("Host")))
+                body = b'{"ok": true}'
+                self.send_response(200)
+                self.send_header("Content-Type", "application/json")
+                self.send_header("Content-Length", str(len(body)))
+                self.end_headers()
+                self.wfile.write(body)
+
+            def log_message(self, *args) -> None:  # noqa: D401
+                pass
+
+        upstream = http.server.ThreadingHTTPServer(("127.0.0.1", 0), Upstream)
+        threading.Thread(target=upstream.serve_forever, daemon=True).start()
+        try:
+            port = upstream.server_address[1]
+            trace = proxy_engine.record_trace(
+                "GET", "/api/ping?x=1", f"http://127.0.0.1:{port}", {}, "", 500, {}, '{"error": "boom"}', 5.0,
+                data_dir=self.temp_dir,
+            )
+            # Default policy: refused before anything is sent, and nothing is recorded.
+            res = proxy_engine.replay_trace(trace["trace_id"], data_dir=self.temp_dir)
+            self.assertFalse(res["ok"])
+            self.assertEqual(res["error_code"], "replay_target_refused")
+            self.assertIn("allow_local_replay", res["error"])
+            self.assertEqual(hits, [])
+            self.assertEqual(proxy_engine.query_traces(status_filter="replayed", data_dir=self.temp_dir)["count"], 0)
+            self.assertEqual(proxy_engine.get_db(self.temp_dir).execute("SELECT COUNT(*) FROM replays").fetchone()[0], 0)
+
+            # The owner switches it on: the exact captured request reaches the recorded upstream.
+            proxy_engine.set_settings_provider(lambda key, default=None: {"allow_local_replay": True}.get(key, default))
+            res = proxy_engine.replay_trace(trace["trace_id"], data_dir=self.temp_dir)
+            self.assertTrue(res["ok"], res)
+            self.assertEqual(res["status_transition"], "500 -> 200")
+            self.assertEqual(hits, [("/api/ping?x=1", f"127.0.0.1:{port}")])
+        finally:
+            upstream.shutdown()
+            upstream.server_close()
+
+    def test_replay_refuses_hosts_resolving_to_metadata_even_when_local_is_allowed(self) -> None:
+        proxy_engine.set_settings_provider(lambda key, default=None: {"allow_local_replay": True}.get(key, default))
+        trace = proxy_engine.record_trace(
+            "GET", "/latest/meta-data/iam/", "http://evil.test:80", {}, "", 404, {}, "{}", 5.0, data_dir=self.temp_dir
+        )
+        real = socket.getaddrinfo
+
+        def rebinding(host, port, *args, **kwargs):
+            if host == "evil.test":
+                return [(socket.AF_INET, socket.SOCK_STREAM, 6, "", ("169.254.169.254", port))]
+            return real(host, port, *args, **kwargs)
+
+        with unittest.mock.patch.object(proxy_engine.socket, "getaddrinfo", rebinding):
+            res = proxy_engine.replay_trace(trace["trace_id"], data_dir=self.temp_dir)
+        self.assertFalse(res["ok"])
+        self.assertEqual(res["error_code"], "replay_target_refused")
+        self.assertIn("169.254.169.254", res["error"])
+        self.assertEqual(proxy_engine.get_db(self.temp_dir).execute("SELECT COUNT(*) FROM replays").fetchone()[0], 0)
+
+    def test_replay_unresolvable_host_is_recorded_as_unreachable(self) -> None:
+        proxy_engine.set_settings_provider(lambda key, default=None: {"allow_local_replay": True}.get(key, default))
+        trace = proxy_engine.record_trace(
+            "GET", "/ping", "http://no-such-host.invalid:80", {}, "", 500, {}, "{}", 5.0, data_dir=self.temp_dir
+        )
+        res = proxy_engine.replay_trace(trace["trace_id"], data_dir=self.temp_dir)
+        self.assertTrue(res["ok"])
+        self.assertEqual(res["new_status"], 502)
+        self.assertIn("upstream_unreachable", res["replay_response_body"])
 
     def test_proxy_forwards_headers_redirects_head_and_concurrency(self) -> None:
         class Upstream(http.server.BaseHTTPRequestHandler):
@@ -489,6 +585,11 @@ class TestToolContract(unittest.TestCase):
         self.assertEqual(
             set(self._props("faultline_simulate")["scenario"]["enum"]), set(proxy_engine.SUPPORTED_SCENARIOS)
         )
+
+    def test_replay_schema_offers_no_target_url(self) -> None:
+        """The replay target is the trace's recorded upstream; the model cannot choose another host."""
+        self.assertNotIn("target_url", self._props("faultline_replay"))
+        self.assertIn("allow_local_replay", self._schema("faultline_replay")["description"])
 
     def test_readme_and_skill_use_declared_parameter_names(self) -> None:
         call_re = re.compile(r"faultline_(proxy|traces|replay|contract|chaos|simulate)\(([^)]*)\)")

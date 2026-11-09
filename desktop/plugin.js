@@ -391,7 +391,7 @@ function FaultlineStudioView() {
                     ? jsx("div", {
                         style: { fontSize: "12px", color: "#fca5a5", marginTop: "4px" },
                         children:
-                          "The upstream service did not answer. Start it (or pass a new target_url) and replay again.",
+                          "The upstream service did not answer. Start it and replay again.",
                       })
                     : null,
                 ],
