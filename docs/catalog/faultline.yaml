@@ -3,7 +3,7 @@
 # screenshot URLs to that same commit before opening the PR.
 name: faultline
 repo: https://github.com/bigmantech001/Faultline
-sha: "REPLACE_WITH_40_CHAR_COMMIT_SHA"
+sha: "e2b2e5652dfac3f37af5865d6a1783e2d4d78791"
 version: "0.1.0"
 title: Faultline
 description: "Local API flight recorder for debugging HTTP services with Hermes. The agent starts a loopback reverse proxy in front of your service, captures every request and response (auth headers and secret JSON fields redacted before storage), learns an OpenAPI 3.1 contract from healthy traffic and flags drift (type changes, missing fields, 5xx, latency regressions), injects chaos faults (429/5xx, latency, truncated JSON), and after a fix replays the exact failing request to prove 500 -> 200. Ships six tools, a tool_execution middleware, /faultline and `hermes faultline` commands, a bundled skill, a Faultline tab in the web dashboard, and a Hermes Desktop studio page, waterfall pane, status chip and inline ::faultline-trace card. Disclosure: the proxy listens on 127.0.0.1 only and forwards to the target_url you give it (normally local, but any http(s) host is accepted); replay re-sends captured requests, so replaying a POST repeats its side effects; captured traffic, contracts and chaos rules are stored in SQLite under $HERMES_HOME/plugin-data/faultline/; each running proxy is a daemon thread in the Hermes process; no telemetry, no other network calls, no credentials read, no shell commands, no Python dependencies."
@@ -15,9 +15,9 @@ docs_url: ""
 readme: true
 platforms: [linux, macos]
 screenshots:
-  - https://raw.githubusercontent.com/bigmantech001/Faultline/REPLACE_WITH_40_CHAR_COMMIT_SHA/docs/screenshots/dashboard-replay.png
-  - https://raw.githubusercontent.com/bigmantech001/Faultline/REPLACE_WITH_40_CHAR_COMMIT_SHA/docs/screenshots/dashboard-inspector.png
-  - https://raw.githubusercontent.com/bigmantech001/Faultline/REPLACE_WITH_40_CHAR_COMMIT_SHA/docs/screenshots/dashboard-drift.png
+  - https://raw.githubusercontent.com/bigmantech001/Faultline/e2b2e5652dfac3f37af5865d6a1783e2d4d78791/docs/screenshots/dashboard-replay.png
+  - https://raw.githubusercontent.com/bigmantech001/Faultline/e2b2e5652dfac3f37af5865d6a1783e2d4d78791/docs/screenshots/dashboard-inspector.png
+  - https://raw.githubusercontent.com/bigmantech001/Faultline/e2b2e5652dfac3f37af5865d6a1783e2d4d78791/docs/screenshots/dashboard-drift.png
 capabilities:
   provides_tools:
     - faultline_proxy
