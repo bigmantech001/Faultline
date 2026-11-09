@@ -15,14 +15,30 @@ await b.send("Emulation.setDeviceMetricsOverride", { width: 1600, height: 900, d
 await b.goto("file://" + PLAYER, 2500);
 while (!(await b.js("window.__ready"))) await sleep(200);
 console.log("font:", await b.js("window.__font"));
+// The screencast only emits a frame when the compositor produces one, so a terminal that sits still
+// between writes yields a handful of frames per second and can drop the last frame of a burst. A 1 px
+// background-coloured dot with an endless transform animation keeps the compositor ticking, so the
+// frames come at a steady rate with the real wall-clock timestamps; the dot itself is invisible.
+await b.js(`(() => { const d = document.createElement("div"); d.id = "__tick";
+  d.style.cssText = "position:fixed;left:0;top:0;width:1px;height:1px;background:#141311;will-change:transform;animation:__tick 1s linear infinite;pointer-events:none";
+  const s = document.createElement("style"); s.textContent = "@keyframes __tick { from { transform: translateX(0) } to { transform: translateX(0.5px) } }";
+  document.head.appendChild(s); document.body.appendChild(d); return true; })()`);
 const stop = await b.screencast(dir);
 await sleep(800);
 await b.js(`start(${Number(process.env.END || 1e9)})`);
-while (!(await b.js("window.__done"))) await sleep(500);
+const t0 = Date.now();
+let lastLog = 0;
+while (!(await b.js("window.__done"))) {
+  await sleep(500);
+  if (Date.now() - lastLog > 10000) { lastLog = Date.now(); console.log(`  ${((Date.now() - t0) / 1000).toFixed(0)}s castT=${Number(await b.js("window.__castT")).toFixed(1)} marks=${Object.keys(await b.js("window.__marks")).length}`); }
+}
 await sleep(1500);
-await stop();
+const frames = await stop();
 const marks = existsSync(join(ROOT, ".cache/marks.json")) ? JSON.parse(readFileSync(join(ROOT, ".cache/marks.json"), "utf8")) : {};
-for (const [k, v] of Object.entries(await b.js("window.__marks"))) marks[`${CLIP}.${k}`] = v;
+const got = await b.js("window.__marks");
+for (const [k, v] of Object.entries(got)) marks[`${CLIP}.${k}`] = v;
 writeFileSync(join(ROOT, ".cache/marks.json"), JSON.stringify(marks, null, 1));
-console.log("captured", CLIP);
+console.log(`captured ${CLIP}: ${frames.length} frames over ${(frames[frames.length - 1].t - frames[0].t).toFixed(1)}s, ${Object.keys(got).length} marks`);
+if (b.consoleLines.length) console.log("console:", b.consoleLines.slice(0, 20));
+b.close();
 process.exit(0);
