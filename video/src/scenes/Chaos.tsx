@@ -2,12 +2,17 @@ import React from "react";
 import { interpolate } from "remotion";
 import { C } from "../theme";
 import { clamp } from "../ui/motion";
-import { Footage, syncTo } from "../ui/Footage";
+import { Footage, Rect, markOf } from "../ui/Footage";
 import { Words } from "../ui/Words";
-import { R } from "../rects";
 import { BUMP } from "../beats";
 import { S, WEBHOOK_ROUTE, pretty } from "../data";
 import { Card, Chip, Fill, Head, In, Json, Kicker, Label, Mono, Pending, Status, useCue } from "./common";
+
+// Measured on the held frame, page CSS px (1600x900).
+const T_VERIFIED: Rect = { x: 0, y: 14, w: 1200, h: 190 }; // "Verified firing:" and its four result lines
+const T_429: Rect = { x: 44, y: 44, w: 1250, h: 52 };       // POST /api/v1/webhooks/stripe -> 429 {"error":"faultline_chaos_injected","rule_id":"chaos-688910",...}
+const T_UNTOUCHED: Rect = { x: 44, y: 100, w: 760, h: 82 }; // checkout and orders -> 200 (untouched), GET stripe -> 404 (method-scoped)
+const T_WHY: Rect = { x: 0, y: 210, w: 1200, h: 230 };     // "the rule is POST-only ... deterministic retry testing" and the retry-path note
 
 /** Chaos: a rule that answers the webhook with 429, and the amber row it leaves in the recorder. */
 export const Chaos: React.FC = () => {
@@ -28,9 +33,20 @@ export const Chaos: React.FC = () => {
         <Head size={40}><Words text="Break it on purpose." at={rel("Chaos") - 2} every={4} /></Head>
       </div>
 
+      {/* The agent's own check of the rule: the webhook gets 429, every other route is untouched, GET is not caught. */}
       <Footage name="term" tag="hermes chat" left={96} top={160} width={992} height={620}
-        startFrom={syncTo("term", "chaos.added", tInject + 4)}
-        cams={[{ f: 0, z: 1.1 }, { f: tInject, z: 1.1 }, { f: tInject + 16, rect: R("term.chaos"), z: 1.5 }]} />
+        hold={markOf("term", "chaos.verified", 2985)}
+        cams={[
+          { f: 0, z: 1.1 },
+          { f: tInject - 4, z: 1.1 },
+          { f: tInject + 14, rect: T_VERIFIED, z: 1.33 },
+          { f: tSo - 6, rect: T_VERIFIED, z: 1.33 },
+          { f: tSo + 14, rect: T_WHY, z: 1.33 },
+        ]}
+        marks={[
+          { rect: T_429, at: tBump - 2, color: C.amber },
+          { rect: T_UNTOUCHED, at: tLatency, color: C.moss },
+        ]} />
 
       {/* the rule */}
       <Card at={tRules} left={1112} top={160} width={712} height={236} accent={C.amber}>
