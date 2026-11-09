@@ -18,3 +18,6 @@ video/public/stills/
 video/public/audio/
 video/src/timing.json
 video/src/footage.json
+
+# The demo film lives on the `film` branch; its recorded terminal text trips the catalog scanner.
+video/
