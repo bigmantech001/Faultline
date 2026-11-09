@@ -1,0 +1,11 @@
+One coupon code. Every checkout using it dies with a 500. The agent fixing it never saw the request.
+Faultline is an API flight recorder: record, learn the contract, break it on purpose, replay to prove a fix.
+
+A Hermes Agent plugin. Real session, nothing mocked:
+- POST /api/v1/checkout 500: ZeroDivisionError, checkout_logic.py:19
+- agent patch, replay: 500 -> 200 in 1.8 ms
+- drift on a 200: total_cents became a string, currency missing
+- chaos rule: POST /api/v1/webhooks/stripe answers 429, 2 hits
+
+Built for the Hermes Agent Plugin Hackathon @NousResearch
+github.com/bigmantech001/Faultline

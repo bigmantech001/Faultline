@@ -1,0 +1,35 @@
+TITLE
+Faultline: a flight recorder for your API, inside Hermes Agent (80 s demo)
+
+DESCRIPTION
+Faultline is a Hermes Agent plugin. It puts a recording proxy in front of your HTTP service, learns each route's contract from healthy responses, flags drift and server errors, injects faults on demand, and replays the exact captured request to prove a fix.
+
+This film is one real hermes chat session, recorded on 2026-11-08 with Hermes Agent 0.23.0 and claude-sonnet-4.6. Nothing is mocked. The terminal is the real session, replayed from an asciicast with the waits sped up (the factor is printed on screen). The right half is the Faultline Studio page in the Hermes Desktop workspace, filmed during the same session. Every number comes from Faultline's own recorder database.
+
+What happens:
+- a storefront checkout with coupon FOUNDERS100 fails: POST /api/v1/checkout 500, ZeroDivisionError at checkout_logic.py:19 (trace flt-92e75bfe)
+- the agent patches the code and Faultline replays the captured request: 500 to 200 in 1.8 ms (replay rpl-e7b938ad)
+- GET /api/v1/orders/102 still answers 200, but total_cents became a string and currency went missing
+- a chaos rule makes POST /api/v1/webhooks/stripe answer 429 (rule chaos-688910, 2 hits)
+- the learned contract exports as OpenAPI 3.1
+
+Code and docs: https://github.com/bigmantech001/Faultline
+Built for the Hermes Agent Plugin Hackathon by Nous Research.
+
+Narration, music and sound effects: ElevenLabs. Graphics: Remotion.
+
+CHAPTERS
+00:00 The incident: one coupon, every checkout dies
+00:11 Faultline, a flight recorder for your API
+00:31 See it: the failing call and drift on a 200
+00:48 Fix it: the patch and the replay, 500 to 200
+01:02 Break it: the 429 rule, and the close
+
+SCENE STARTS (from src/timing.json, for reference)
+00:00 open
+00:11 turn
+00:17 record
+00:31 see
+00:48 fix
+01:02 chaos
+01:11 close
