@@ -28,7 +28,7 @@ export const Poster: React.FC = () => {
         <svg width={150} height={60} viewBox="0 0 150 60"><path d="M4 30 H136 M112 8 L136 30 L112 52" fill="none" stroke={C.ink} strokeWidth={6} strokeLinecap="round" strokeLinejoin="round" /></svg>
         <span style={{ fontSize: 230, color: C.moss }}>200</span>
       </div>
-      <div style={{ position: "absolute", left: 1120, top: 760, width: 704, fontFamily: mono, fontSize: 24, lineHeight: 1.6, color: C.muted }}>
+      <div style={{ position: "absolute", left: 1250, top: 760, width: 600, fontFamily: mono, fontSize: 24, lineHeight: 1.6, color: C.muted }}>
         <div style={{ color: C.ink, fontWeight: 600 }}>a plugin for Hermes Agent</div>
         <div>record · learn the contract</div>
         <div>break it on purpose · prove the fix</div>
