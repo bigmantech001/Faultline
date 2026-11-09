@@ -2,13 +2,24 @@ import React from "react";
 import { interpolate } from "remotion";
 import { C } from "../theme";
 import { clamp } from "../ui/motion";
-import { Footage, syncTo } from "../ui/Footage";
+import { Footage, Rect, markOf } from "../ui/Footage";
 import { Words } from "../ui/Words";
-import { R } from "../rects";
 import { COUPON_ROUTE, DRIFT_ROUTE, S, pretty } from "../data";
 import { Card, Cut, Fill, Head, In, Kicker, Label, Mono, Pending, Status, useCue } from "./common";
 
 const errorOf = (body: string | undefined) => { try { return JSON.parse(body ?? "") as { error?: string; detail?: string }; } catch { return {}; } };
+
+// Measured on the held frames, page CSS px (1600x900).
+const T_ERROR: Rect = { x: 0, y: 10, w: 1180, h: 220 };      // "-> 500" + ZeroDivisionError + the agent's cause paragraph
+const T_DETAIL: Rect = { x: 44, y: 46, w: 920, h: 48 };       // "detail": "division by zero in calculate_fee_ratio() at checkout_logic.py:19"
+const T_CAUSE: Rect = { x: 24, y: 158, w: 1290, h: 56 };      // "FOUNDERS100 maps to a 1.00 discount, so the coupon takes the order to exactly 0 payable"
+const T_DRIFT: Rect = { x: 0, y: 400, w: 1140, h: 270 };     // the next prompt + the agent naming both drifts
+const T_DRIFT_LINE: Rect = { x: 24, y: 552, w: 990, h: 62 };  // "confirm the two drifts (missing_required_field $.currency, type_mismatch $.total_cents)"
+const S_INSPECTOR: Rect = { x: 1030, y: 310, w: 550, h: 460 };
+const S_VIOLATION: Rect = { x: 1037, y: 386, w: 523, h: 66 }; // "OpenAPI Contract Violations: ... returned HTTP 500."
+const S_ERROR: Rect = { x: 1044, y: 642, w: 470, h: 80 };     // "error": "ZeroDivisionError", "detail": ...
+const S_WATERFALL: Rect = { x: 290, y: 320, w: 720, h: 360 };
+const S_DRIFT_ROW: Rect = { x: 300, y: 366, w: 690, h: 42 };  // 200 GET /api/v1/orders/102 · 2 drifts
 
 /** The failing call in the recorder, and drift on a route that still says 200. */
 export const See: React.FC = () => {
@@ -34,25 +45,37 @@ export const See: React.FC = () => {
         <Head size={40}><Words text="See." at={rel("The") - 2} every={4} /></Head>
       </div>
 
-      <Footage name="term" tag="hermes chat" left={96} top={160} width={992} height={620}
-        startFrom={syncTo("term", "trace.read", tFailing - 4)}
-        cams={[
-          { f: 0, z: 1.1 },
-          { f: tFailing - 6, z: 1.1 },
-          { f: tFailing + 10, rect: R("term.trace"), z: 1.6 },
-          { f: tAnd - 8, rect: R("term.trace"), z: 1.6 },
-          { f: tAnd + 8, z: 1.1 },
-        ]} />
-      {/* the Studio: the trace row first, then a cut to the drift finding */}
+      {/* Left: the agent's own read of the failure, held, then the moment it names both drifts itself. */}
+      <Cut from={0} until={tAnd}>
+        <Footage name="term" tag="hermes chat" left={96} top={160} width={992} height={620}
+          hold={markOf("term", "see.error", 1130)}
+          cams={[{ f: 0, z: 1.1 }, { f: tFailing - 8, z: 1.1 }, { f: tFailing + 8, rect: T_ERROR, z: 1.36 }]}
+          marks={[
+            { rect: T_DETAIL, at: tDivision - 2 },
+            { rect: T_CAUSE, at: rel("when") - 2 },
+          ]} />
+      </Cut>
+      <Cut from={tAnd}>
+        <Footage name="term" tag="hermes chat" left={96} top={160} width={992} height={620}
+          hold={markOf("term", "see.drift", 2247)}
+          cams={[{ f: 0, rect: T_DRIFT, z: 1.4 }]}
+          marks={[{ rect: T_DRIFT_LINE, at: tDrift - tAnd, color: C.amber }]} />
+      </Cut>
+      {/* Right: the same trace in the Studio inspector, then the drifted route in the waterfall. */}
       <Cut from={0} until={tAnd}>
         <Footage name="studio" tag="hermes desktop · faultline studio" left={1112} top={160} width={712} height={620}
-          startFrom={syncTo("studio", "first_traces", 0)}
-          cams={[{ f: 0, z: 1 }, { f: tFailing - 4, z: 1 }, { f: tFailing + 12, rect: R("studio.trace_row"), z: 1.8 }]} />
+          hold={markOf("studio", "see.inspector", 3300)}
+          cams={[{ f: 0, z: 1 }, { f: tFailing - 6, z: 1 }, { f: tFailing + 12, rect: S_INSPECTOR, z: 2.1 }]}
+          marks={[
+            { rect: S_VIOLATION, at: tFailing + 14, color: C.ember },
+            { rect: S_ERROR, at: tDivision - 2 },
+          ]} />
       </Cut>
       <Cut from={tAnd}>
         <Footage name="studio" tag="hermes desktop · faultline studio" left={1112} top={160} width={712} height={620}
-          startFrom={syncTo("studio", "drift_visible", tDrift - tAnd)}
-          cams={[{ f: 0, z: 1 }, { f: tDrift - tAnd - 4, z: 1 }, { f: tDrift - tAnd + 12, rect: R("studio.drift_finding"), z: 1.6 }]} />
+          hold={markOf("studio", "see.inspector", 3300)}
+          cams={[{ f: 0, rect: S_WATERFALL, z: 1.7 }, { f: tDrift - tAnd - 6, rect: S_WATERFALL, z: 1.7 }, { f: tDrift - tAnd + 12, rect: S_DRIFT_ROW, z: 2.1 }]}
+          marks={[{ rect: S_DRIFT_ROW, at: tDrift - tAnd, color: C.amber }]} />
       </Cut>
 
       {/* the failing call */}
